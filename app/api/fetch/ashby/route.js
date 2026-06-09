@@ -4,43 +4,49 @@ import { createServiceSupabase } from '@/lib/supabase-server'
 const COMPANIES = [
   // AI/ML
   'openai', 'anthropic', 'mistral', 'cohere', 'adept', 'inflection',
-  'character', 'runway', 'stability', 'midjourney', 'jasper',
-  'harvey', 'casetext', 'typeface', 'writer', 'copy-ai',
-  // Fintech
-  'mercury', 'brex', 'ramp', 'arc', 'pipe', 'capchase',
-  'moderntreasury', 'parafin', 'settle', 'slope',
+  'runway', 'jasper', 'harvey', 'typeface', 'writer',
   // Dev Tools
   'linear', 'retool', 'airplane', 'superblocks', 'baseten',
-  'modal', 'replicate', 'banana', 'beam',
-  'temporal', 'inngest', 'trigger',
-  // Data/Analytics
+  'modal', 'replicate', 'temporal', 'inngest',
+  // Fintech
+  'mercury', 'arc', 'pipe', 'capchase', 'moderntreasury',
+  'parafin', 'settle', 'slope',
+  // Data
   'preset', 'lightdash', 'cube', 'metaplane', 'datafold',
   'hightouch', 'census', 'polytomic',
   // Security
-  'huntress', 'abnormal', 'sublime', 'material',
-  'vanta', 'drata', 'laika', 'secureframe',
+  'huntress', 'abnormal', 'vanta', 'drata', 'laika', 'secureframe',
   // Healthcare
-  'healthie', 'spruce', 'ribbon', 'particle',
-  'elation', 'hint', 'canvas',
+  'healthie', 'spruce', 'ribbon', 'particle', 'elation',
   // HR Tech
-  'rippling', 'deel', 'remote', 'oyster', 'papaya',
-  'leapsome', 'culture-amp', 'betterworks',
+  'leapsome', 'betterworks',
   // Infrastructure
-  'render', 'railway', 'fly', 'planetscale',
-  'neon', 'turso', 'upstash',
-  // Consumer
-  'lunchclub', 'stir', 'supergreat', 'whatnot',
+  'render', 'railway', 'neon', 'turso', 'upstash',
   // Climate
-  'watershed', 'patch', 'cloverly', 'terrapass',
-  // Real Estate
-  'knock', 'orchard', 'flyhomes', 'homeward',
+  'watershed', 'patch', 'cloverly',
   // Legal
   'ironclad', 'spellbook', 'lexion', 'evisort',
   // EdTech
-  'synthesis', 'outschool', 'primer', 'numerade',
+  'synthesis', 'outschool', 'numerade',
   // Logistics
-  'stord', 'shipbob', 'ware2go', 'flexe',
+  'stord', 'shipbob', 'flexe',
 ]
+
+const QUERY = `
+query ApiJobBoardWithTeams($organizationHostedJobsPageName: String!) {
+  jobBoard: jobBoardWithTeams(organizationHostedJobsPageName: $organizationHostedJobsPageName) {
+    jobPostings {
+      id
+      title
+      locationName
+      employmentType
+      isRemote
+      publishedDate
+      descriptionPlain
+    }
+  }
+}
+`
 
 export async function GET() {
   const supabase = createServiceSupabase()
@@ -50,23 +56,15 @@ export async function GET() {
     COMPANIES.map(async (company) => {
       try {
         const res = await fetch(
-          `https://jobs.ashbyhq.com/api/non-user-graphql`,
+          'https://jobs.ashbyhq.com/api/non-user-graphql',
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               operationName: 'ApiJobBoardWithTeams',
               variables: { organizationHostedJobsPageName: company },
-              query: `query ApiJobBoardWithTeams($organizationHostedJobsPageName: String!) {
-                jobBoard: jobBoardWithTeams(organizationHostedJobsPageName: $organizationHostedJobsPageName) {
-                  jobPostings {
-                    id title locationName employmentType isRemote
-                    externalLink publishedDate
-                    jobRequisition { compensationTiers { title } }
-                  }
-                }
-              }`
-            })
+              query: QUERY,
+            }),
           }
         )
         if (!res.ok) return
@@ -75,14 +73,16 @@ export async function GET() {
         if (!postings?.length) return
 
         for (const job of postings) {
-          const applyUrl = job.externalLink || `https://jobs.ashbyhq.com/${company}/${job.id}`
+          // Correct Ashby URL format
+          const applyUrl = `https://jobs.ashbyhq.com/${company}/${job.id}`
+
           jobs.push({
             apply_url: applyUrl,
             company,
             title: job.title,
-            description: '',
-            location: job.locationName || (job.isRemote ? 'Remote' : ''),
-            job_type: job.employmentType?.toLowerCase() || 'fulltime',
+            description: (job.descriptionPlain || '').slice(0, 5000),
+            location: job.isRemote ? 'Remote' : (job.locationName || ''),
+            job_type: (job.employmentType || 'fulltime').toLowerCase(),
             source: 'ashby',
             ats_platform: 'ashby',
             posted_at: job.publishedDate || new Date().toISOString(),
