@@ -74,27 +74,64 @@ function deriveJobType(job) {
   const desc = (job.description || '').toLowerCase()
   const type = (job.job_type || '').toLowerCase()
 
-  if (title.includes('intern') || type.includes('intern') ||
-    desc.includes('internship program') || desc.includes('summer intern')) return 'internship'
-  if (title.includes('co-op') || title.includes('coop') ||
-    desc.includes('co-op program') || desc.includes('cooperative education')) return 'coop'
-  if (type.includes('contract') || title.includes('contract')) return 'contract'
-  if (type.includes('part') || title.includes('part-time')) return 'parttime'
-  if (type.includes('full') || type === 'permanent') return 'fulltime'
-  if (job.source === 'themuse') return 'internship'
-  return 'unknown'
+  // Explicit internship signals — title only, not description
+  if (
+    title.includes('intern') ||
+    title.includes('internship') ||
+    type === 'internship' ||
+    type === 'intern'
+  ) return 'internship'
+
+  // Co-op signals
+  if (
+    title.includes('co-op') ||
+    title.includes('coop') ||
+    title.includes('co op') ||
+    desc.includes('co-op program') ||
+    desc.includes('cooperative education')
+  ) return 'coop'
+
+  // Contract
+  if (
+    type.includes('contract') ||
+    type.includes('freelance') ||
+    title.includes('contract') ||
+    title.includes('freelance')
+  ) return 'contract'
+
+  // Part time
+  if (
+    type.includes('part') ||
+    title.includes('part-time') ||
+    title.includes('part time')
+  ) return 'parttime'
+
+  // Full time
+  if (
+    type.includes('full') ||
+    type === 'permanent' ||
+    type === 'fulltime' ||
+    title.includes('full-time') ||
+    title.includes('full time')
+  ) return 'fulltime'
+
+  // Default fulltime — never default to internship
+  return 'fulltime'
 }
 
 function deriveIsDirectApply(job) {
   const url = (job.apply_url || '').toLowerCase()
   return (
-    url.includes('greenhouse.io') || url.includes('lever.co') ||
-    url.includes('ashbyhq.com') || job.source === 'greenhouse' ||
-    job.source === 'lever' || job.source === 'ashby'
+    url.includes('greenhouse.io') ||
+    url.includes('lever.co') ||
+    url.includes('ashbyhq.com') ||
+    job.source === 'greenhouse' ||
+    job.source === 'lever' ||
+    job.source === 'ashby'
   )
 }
 
-// ─── CLASSIFY JOB WITH AI ─────────────────────────────────────
+// ─── AI CLASSIFICATION ────────────────────────────────────────
 
 async function classifyWithAI(job) {
   const completion = await openai.chat.completions.create({
@@ -109,19 +146,67 @@ async function classifyWithAI(job) {
       content: `Classify this job. Return ONLY a JSON object:
 {
   "location_type": "us-remote|us-onsite|non-us|unknown",
-  "role_tags": ["tags from allowed list"],
+  "role_tags": ["tags from allowed list — be accurate"],
   "seniority_level": "intern|entry|junior|mid|senior|lead|unknown",
-  "required_skills": ["specific skills explicitly required — lowercase, e.g. 'figma', 'python', 'sql'"],
-  "nice_skills": ["preferred but not required skills — lowercase"]
+  "required_skills": ["skills explicitly required — lowercase, specific"],
+  "nice_skills": ["preferred skills — lowercase, specific"]
 }
 
-LOCATION: us-remote (remote+US), us-onsite (US city), non-us (other country), unknown
-SENIORITY: intern (internship), entry (0-2yr/new grad), junior (1-3yr), mid (3-6yr), senior (senior/staff/principal), lead (manager/director/vp)
-ROLE TAGS (pick ALL that apply):
-${VALID_TAGS.join(', ')}
+LOCATION:
+- us-remote: remote + US context
+- us-onsite: specific US city/state, not remote
+- non-us: non-US country mentioned
+- unknown: cannot determine
 
-REQUIRED SKILLS: extract only skills explicitly listed as requirements — be specific and lowercase
-NICE SKILLS: extract preferred/bonus skills
+SENIORITY:
+- intern: internship/co-op role
+- entry: 0-2yr, new grad, associate
+- junior: 1-3yr explicitly mentioned
+- mid: 3-6yr, no qualifier
+- senior: senior/sr/staff/principal in title
+- lead: lead/manager/director/head/vp
+- unknown: cannot determine
+
+ROLE TAGS (pick ALL that apply, be precise):
+product-design, ux-design, ui-design, visual-design, interaction-design,
+graphic-design, brand-design, motion-design, design-research,
+software-engineering, frontend-engineering, backend-engineering,
+full-stack-engineering, mobile-engineering, ios-engineering, android-engineering,
+devops, platform-engineering, site-reliability, embedded-systems,
+hardware-engineering, electrical-engineering, mechanical-engineering,
+civil-engineering, chemical-engineering, biomedical-engineering,
+machine-learning, ai-engineering, data-science, data-engineering,
+data-analysis, business-intelligence, bioinformatics, computational-biology,
+nlp, computer-vision, robotics,
+product-management, program-management, project-management,
+technical-program-management, product-operations,
+investment-banking, financial-analysis, accounting, audit,
+private-equity, venture-capital, equity-research, risk-analysis,
+actuarial, corporate-finance, treasury, tax, quantitative-finance,
+business-analysis, strategy, consulting, operations,
+supply-chain, logistics, procurement, business-development, revenue-operations,
+marketing, growth, content, brand, digital-marketing,
+product-marketing, seo, performance-marketing, pr, communications,
+social-media, email-marketing, demand-generation,
+sales, sales-development, account-executive, account-management,
+customer-success, partnerships,
+clinical-research, healthcare, public-health, medical-devices,
+pharmaceuticals, biotech, genomics, drug-discovery,
+regulatory-affairs, quality-assurance,
+legal, compliance, policy,
+human-resources, talent-acquisition, people-operations,
+learning-development, compensation-benefits,
+cybersecurity, information-security, security-engineering,
+sustainability, environmental, climate-tech, energy,
+research, ux-research, market-research, policy-research,
+journalism, editorial, video-production,
+education-technology, curriculum-design, instructional-design,
+real-estate, architecture, urban-planning,
+nonprofit, government, public-administration,
+other
+
+REQUIRED SKILLS: specific skills mentioned as requirements — lowercase
+NICE SKILLS: preferred/bonus skills — lowercase
 
 Title: ${job.title}
 Company: ${job.company}
@@ -133,15 +218,23 @@ Description: ${(job.description || '').slice(0, 1000)}`
   const result = safeJSON(completion.choices[0].message.content)
 
   return {
-    location_type: VALID_LOCATION_TYPES.includes(result.location_type) ? result.location_type : 'unknown',
-    role_tags: Array.isArray(result.role_tags) ? result.role_tags.filter(t => VALID_TAGS.includes(t)).slice(0, 8) : ['other'],
-    seniority_level: VALID_SENIORITY.includes(result.seniority_level) ? result.seniority_level : 'unknown',
-    required_skills: Array.isArray(result.required_skills) ? result.required_skills.map(s => s.toLowerCase()).slice(0, 20) : [],
-    nice_skills: Array.isArray(result.nice_skills) ? result.nice_skills.map(s => s.toLowerCase()).slice(0, 10) : [],
+    location_type: VALID_LOCATION_TYPES.includes(result.location_type)
+      ? result.location_type : 'unknown',
+    role_tags: Array.isArray(result.role_tags)
+      ? result.role_tags.filter(t => VALID_TAGS.includes(t)).slice(0, 8)
+      : ['other'],
+    seniority_level: VALID_SENIORITY.includes(result.seniority_level)
+      ? result.seniority_level : 'unknown',
+    required_skills: Array.isArray(result.required_skills)
+      ? result.required_skills.map(s => s.toLowerCase()).slice(0, 20)
+      : [],
+    nice_skills: Array.isArray(result.nice_skills)
+      ? result.nice_skills.map(s => s.toLowerCase()).slice(0, 10)
+      : [],
   }
 }
 
-// ─── GENERATE EMBEDDING ──────────────────────────────────────
+// ─── EMBEDDING ────────────────────────────────────────────────
 
 async function generateEmbedding(job, classification) {
   const text = `
@@ -161,7 +254,7 @@ async function generateEmbedding(job, classification) {
   return response.data[0].embedding
 }
 
-// ─── STAGE 4: AI CROSS CHECK ─────────────────────────────────
+// ─── AI CROSS CHECK (Stage 4) ─────────────────────────────────
 
 async function getAIMatchScore(profile, job, dnaScore, jdCoverageScore) {
   try {
@@ -171,7 +264,7 @@ async function getAIMatchScore(profile, job, dnaScore, jdCoverageScore) {
       temperature: 0,
       messages: [{
         role: 'system',
-        content: 'You are a senior recruiter. Evaluate if this candidate is a genuine fit for this job. Be strict and realistic. Return only valid JSON.'
+        content: 'You are a senior recruiter. Evaluate if this candidate is a genuine fit. Be strict and realistic. Return only valid JSON.'
       }, {
         role: 'user',
         content: `Evaluate this match. Return ONLY a JSON object:
@@ -179,31 +272,31 @@ async function getAIMatchScore(profile, job, dnaScore, jdCoverageScore) {
   "final_score": 0-100,
   "verdict": "Strong Match|Good Match|Weak Match|Not a Match",
   "reason": "2-3 specific sentences referencing actual skills and experience",
-  "red_flags": ["any concerns or mismatches"],
+  "red_flags": ["any concerns"],
   "green_flags": ["specific reasons this is a good match"]
 }
 
-SCORING GUIDE:
-90-100: Perfect fit — all required skills, right level, right role
-75-89: Strong fit — most required skills, minor gaps
-60-74: Decent fit — some required skills, notable gaps
-Below 60: Weak fit — missing key requirements
+SCORING:
+90-100: Perfect — all required skills, right level, right role
+75-89: Strong — most required skills, minor gaps
+60-74: Decent — some required skills, notable gaps
+Below 60: Weak — missing key requirements
 
-Preliminary DNA score: ${dnaScore}/100
-JD Coverage score: ${jdCoverageScore}/100
+DNA score: ${dnaScore}/100
+JD Coverage: ${jdCoverageScore}/100
 
 CANDIDATE:
 Role: ${profile.primary_role}
 Level: ${profile.career_stage}
 Proven skills: ${(profile.proven_skills || []).join(', ')}
 All skills: ${(profile.skill_groupings || []).slice(0, 15).join(', ')}
-Key achievements: ${(profile.experience_highlights || []).slice(0, 3).join(' | ')}
+Highlights: ${(profile.experience_highlights || []).slice(0, 3).join(' | ')}
 Industries: ${(profile.industries || []).join(', ')}
 
 JOB:
 Title: ${job.title} at ${job.company}
 Level: ${job.seniority_level}
-Required skills: ${(job.required_skills || []).join(', ')}
+Required: ${(job.required_skills || []).join(', ')}
 Description: ${(job.description || '').slice(0, 600)}`
       }]
     })
@@ -221,7 +314,7 @@ Description: ${(job.description || '').slice(0, 600)}`
   }
 }
 
-// ─── 4-STAGE MATCH AND QUEUE ─────────────────────────────────
+// ─── 4-STAGE MATCH AND QUEUE ──────────────────────────────────
 
 async function matchAndQueue(job, classification, jobEmbedding, supabase) {
   if (!job.is_direct_apply) return 0
@@ -247,8 +340,10 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
 
       // ── STAGE 1B: JOB TYPE ───────────────────────────
       const userJobTypes = userSettings.job_types || ['internship', 'coop']
-      if (classification.job_type_clean !== 'unknown' &&
-        !userJobTypes.includes(classification.job_type_clean)) continue
+      if (
+        classification.job_type_clean !== 'unknown' &&
+        !userJobTypes.includes(classification.job_type_clean)
+      ) continue
 
       // ── STAGE 1C: DAILY LIMIT ────────────────────────
       const { count: appliedToday } = await supabase
@@ -270,7 +365,7 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
 
       if (existing) continue
 
-      // ── GET PROFILE ──────────────────────────────────
+      // ── GET FULL PROFILE ─────────────────────────────
       const { data: profile } = await supabase
         .from('intelligence_profiles')
         .select('embedding, primary_role, career_stage, suggested_roles, skill_groupings, experience_highlights, target_role_tags, proven_skills, learning_skills, industries')
@@ -290,15 +385,15 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
       // ── STAGE 1F: ROLE TAG OVERLAP ───────────────────
       const userTags = profile.target_role_tags || []
       const jobTags = classification.role_tags || []
-      const hasRoleOverlap = jobTags.some(tag => userTags.includes(tag))
-      if (!hasRoleOverlap) continue
+      const tagOverlap = jobTags.filter(tag => userTags.includes(tag))
+      if (tagOverlap.length === 0) continue
 
       // ── STAGE 2: DNA SCORE ───────────────────────────
       const requiredSkills = classification.required_skills || []
       const niceSkills = classification.nice_skills || []
       const provenSkills = (profile.proven_skills || []).map(s => s.toLowerCase())
       const learningSkills = (profile.learning_skills || []).map(s => s.toLowerCase())
-      const allUserSkills = [...provenSkills, ...learningSkills]
+      const allUserSkills = [...new Set([...provenSkills, ...learningSkills])]
 
       // Required skills coverage (0-50 points)
       let requiredMatches = 0
@@ -307,15 +402,14 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
           allUserSkills.some(us => us.includes(skill) || skill.includes(us))
         ).length
         const requiredCoverage = requiredMatches / requiredSkills.length
-        // Must cover at least 30% of required skills
         if (requiredCoverage < 0.3) continue
       }
 
       const requiredScore = requiredSkills.length > 0
         ? Math.round((requiredMatches / requiredSkills.length) * 50)
-        : 35 // default if no required skills listed
+        : 35
 
-      // Nice-to-have skills (0-20 points)
+      // Nice skills (0-20 points)
       const niceMatches = niceSkills.filter(skill =>
         allUserSkills.some(us => us.includes(skill) || skill.includes(us))
       ).length
@@ -323,9 +417,8 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
         ? Math.round((niceMatches / niceSkills.length) * 20)
         : 10
 
-      // Role tag overlap depth (0-20 points)
-      const overlapCount = jobTags.filter(tag => userTags.includes(tag)).length
-      const roleScore = Math.min(20, overlapCount * 7)
+      // Role overlap depth (0-20 points)
+      const roleScore = Math.min(20, tagOverlap.length * 7)
 
       // Industry match (0-10 points)
       const userIndustries = (profile.industries || []).map(i => i.toLowerCase())
@@ -334,38 +427,37 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
       const industryScore = industryMatch ? 10 : 0
 
       const dnaScore = requiredScore + niceScore + roleScore + industryScore
-
-      // Must score at least 40 DNA points
       if (dnaScore < 40) continue
 
-      // ── STAGE 3: JD vs RESUME COVERAGE ───────────────
-      const allSkillsStr = (profile.skill_groupings || []).map(s => s.toLowerCase()).join(' ')
+      // ── STAGE 3: JD COVERAGE ─────────────────────────
+      const allSkillsLower = (profile.skill_groupings || []).map(s => s.toLowerCase())
       const jobDescLower = (job.description || '').toLowerCase()
       const jobTitleStr = (job.title || '').toLowerCase()
 
-      // Count how many user skills appear in the JD
-      const skillMentions = (profile.skill_groupings || []).filter(skill => {
-        const s = skill.toLowerCase()
-        return jobDescLower.includes(s) || jobTitleStr.includes(s)
-      }).length
+      const skillMentions = allSkillsLower.filter(skill =>
+        jobDescLower.includes(skill) || jobTitleStr.includes(skill)
+      ).length
 
       const jdCoverageScore = Math.min(100, skillMentions * 10)
-
-      // Need at least 1 skill mentioned in JD
       if (jdCoverageScore === 0 && requiredSkills.length > 0) continue
 
       // ── STAGE 4: AI CROSS CHECK ───────────────────────
-      const aiResult = await getAIMatchScore(profile, {
-        ...job,
-        seniority_level: classification.seniority_level,
-        required_skills: classification.required_skills,
-        nice_skills: classification.nice_skills,
-      }, dnaScore, jdCoverageScore)
+      const aiResult = await getAIMatchScore(
+        profile,
+        {
+          ...job,
+          seniority_level: classification.seniority_level,
+          required_skills: classification.required_skills,
+          nice_skills: classification.nice_skills,
+        },
+        dnaScore,
+        jdCoverageScore
+      )
 
       const finalScore = aiResult.score
       if (finalScore < (userSettings.match_threshold || 72)) continue
 
-      // ── QUEUE IT ──────────────────────────────────────
+      // ── QUEUE ─────────────────────────────────────────
       const matchBreakdown = {
         dna_score: dnaScore,
         jd_coverage: jdCoverageScore,
@@ -375,6 +467,7 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
         red_flags: aiResult.red_flags,
         required_skills_matched: requiredMatches,
         required_skills_total: requiredSkills.length,
+        tag_overlap: tagOverlap,
       }
 
       const { error } = await supabase.from('apply_queue').insert({
@@ -407,14 +500,30 @@ export async function GET(request) {
   const url = new URL(request.url)
   const limit = parseInt(url.searchParams.get('limit') || '20')
 
-  const { data: jobs, error } = await supabase
+  // Prioritize internship jobs first
+  let { data: jobs, error } = await supabase
     .from('job_listings')
     .select('job_id, apply_url, company, title, description, location, job_type, source')
     .eq('classified', false)
+    .ilike('title', '%intern%')
     .order('created_at', { ascending: true })
     .limit(limit)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // If no internship jobs left, process any unclassified
+  if (!jobs?.length) {
+    const fallback = await supabase
+      .from('job_listings')
+      .select('job_id, apply_url, company, title, description, location, job_type, source')
+      .eq('classified', false)
+      .order('created_at', { ascending: true })
+      .limit(limit)
+
+    if (fallback.error) return NextResponse.json({ error: fallback.error.message }, { status: 500 })
+    jobs = fallback.data
+  }
+
   if (!jobs?.length) return NextResponse.json({ message: 'All classified', count: 0 })
 
   let classified = 0, queued = 0, failed = 0
@@ -480,5 +589,11 @@ export async function GET(request) {
     }))
   }
 
-  return NextResponse.json({ success: true, classified, queued, failed, total: jobs.length })
+  return NextResponse.json({
+    success: true,
+    classified,
+    queued,
+    failed,
+    total: jobs.length,
+  })
 }
