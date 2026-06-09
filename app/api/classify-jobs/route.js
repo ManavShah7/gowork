@@ -338,9 +338,9 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
       // Convert to 0-99 score
       // similarity range is typically 0.3-0.9 for relevant matches
       // normalize: anything above 0.5 is a decent match
-      const score = Math.round(Math.min(99, Math.max(0,
-        ((similarity - 0.3) / 0.6) * 99
-      )))
+      // cosine similarity ranges -1 to 1
+// convert to 0-99 scale
+const score = Math.round(((similarity + 1) / 2) * 99)
 
       if (score >= (userSettings.match_threshold || 75)) {
         const { error } = await supabase.from('apply_queue').insert({
