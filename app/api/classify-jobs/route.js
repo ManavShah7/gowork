@@ -4,6 +4,7 @@ import OpenAI from 'openai'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
+const VALID_JOB_TYPES = ['internship', 'coop', 'fulltime', 'parttime', 'contract', 'unknown']
 const VALID_LOCATION_TYPES = ['us-remote', 'us-onsite', 'non-us', 'unknown']
 const VALID_SENIORITY = ['intern', 'entry', 'junior', 'mid', 'senior', 'lead', 'unknown']
 const VALID_TAGS = [
@@ -45,8 +46,6 @@ const VALID_TAGS = [
   'other',
 ]
 
-// ─── HELPERS ─────────────────────────────────────────────────
-
 function safeJSON(text, fallback = {}) {
   try {
     const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
@@ -69,56 +68,6 @@ function parseEmbedding(embedding) {
   return null
 }
 
-function deriveJobType(job) {
-  const title = (job.title || '').toLowerCase()
-  const desc = (job.description || '').toLowerCase()
-  const type = (job.job_type || '').toLowerCase()
-
-  // Explicit internship signals — title only, not description
-  if (
-  /\bintern\b/i.test(title) ||
-  /\binternship\b/i.test(title) ||
-  type === 'internship' ||
-  type === 'intern'
-) return 'internship'
-
-  // Co-op signals
-  if (
-    title.includes('co-op') ||
-    title.includes('coop') ||
-    title.includes('co op') ||
-    desc.includes('co-op program') ||
-    desc.includes('cooperative education')
-  ) return 'coop'
-
-  // Contract
-  if (
-    type.includes('contract') ||
-    type.includes('freelance') ||
-    title.includes('contract') ||
-    title.includes('freelance')
-  ) return 'contract'
-
-  // Part time
-  if (
-    type.includes('part') ||
-    title.includes('part-time') ||
-    title.includes('part time')
-  ) return 'parttime'
-
-  // Full time
-  if (
-    type.includes('full') ||
-    type === 'permanent' ||
-    type === 'fulltime' ||
-    title.includes('full-time') ||
-    title.includes('full time')
-  ) return 'fulltime'
-
-  // Default fulltime — never default to internship
-  return 'fulltime'
-}
-
 function deriveIsDirectApply(job) {
   const url = (job.apply_url || '').toLowerCase()
   return (
@@ -130,8 +79,6 @@ function deriveIsDirectApply(job) {
     job.source === 'ashby'
   )
 }
-
-// ─── AI CLASSIFICATION ────────────────────────────────────────
 
 async function classifyWithAI(job) {
   const completion = await openai.chat.completions.create({
@@ -145,29 +92,36 @@ async function classifyWithAI(job) {
       role: 'user',
       content: `Classify this job. Return ONLY a JSON object:
 {
+  "job_type_clean": "internship|coop|fulltime|parttime|contract|unknown",
   "location_type": "us-remote|us-onsite|non-us|unknown",
-  "role_tags": ["tags from allowed list — be accurate"],
+  "role_tags": ["tags from allowed list"],
   "seniority_level": "intern|entry|junior|mid|senior|lead|unknown",
-  "required_skills": ["skills explicitly required — lowercase, specific"],
-  "nice_skills": ["preferred skills — lowercase, specific"]
+  "required_skills": ["skills explicitly required — lowercase"],
+  "nice_skills": ["preferred skills — lowercase"]
 }
 
-LOCATION:
-- us-remote: remote + US context
-- us-onsite: specific US city/state, not remote
-- non-us: non-US country mentioned
-- unknown: cannot determine
+JOB TYPE — be very precise:
+- "internship": title explicitly says "Intern" or "Internship" as the ROLE TYPE
+- "coop": title says "Co-op", "Coop", "Cooperative Education"
+- "fulltime": permanent role, no internship/coop language
+- "parttime": explicitly part-time
+- "contract": contract, freelance, temporary
+- "unknown": cannot determine
+CRITICAL: "Internal Audit", "International Manager" are NOT internships.
+Only internship if the POSITION ITSELF is an internship program.
+
+LOCATION: us-remote (remote+US), us-onsite (US city/state), non-us (other country), unknown
 
 SENIORITY:
 - intern: internship/co-op role
 - entry: 0-2yr, new grad, associate
-- junior: 1-3yr explicitly mentioned
+- junior: 1-3yr explicitly
 - mid: 3-6yr, no qualifier
 - senior: senior/sr/staff/principal in title
-- lead: lead/manager/director/head/vp
+- lead: manager/director/vp/head/chief/lead
 - unknown: cannot determine
 
-ROLE TAGS (pick ALL that apply, be precise):
+ROLE TAGS (pick ALL that apply):
 product-design, ux-design, ui-design, visual-design, interaction-design,
 graphic-design, brand-design, motion-design, design-research,
 software-engineering, frontend-engineering, backend-engineering,
@@ -205,12 +159,13 @@ real-estate, architecture, urban-planning,
 nonprofit, government, public-administration,
 other
 
-REQUIRED SKILLS: specific skills mentioned as requirements — lowercase
+REQUIRED SKILLS: specific skills listed as requirements — lowercase
 NICE SKILLS: preferred/bonus skills — lowercase
 
 Title: ${job.title}
 Company: ${job.company}
 Location: ${job.location || 'unknown'}
+Job Type Field: ${job.job_type || 'not specified'}
 Description: ${(job.description || '').slice(0, 1000)}`
     }]
   })
@@ -218,6 +173,8 @@ Description: ${(job.description || '').slice(0, 1000)}`
   const result = safeJSON(completion.choices[0].message.content)
 
   return {
+    job_type_clean: VALID_JOB_TYPES.includes(result.job_type_clean)
+      ? result.job_type_clean : 'fulltime',
     location_type: VALID_LOCATION_TYPES.includes(result.location_type)
       ? result.location_type : 'unknown',
     role_tags: Array.isArray(result.role_tags)
@@ -233,8 +190,6 @@ Description: ${(job.description || '').slice(0, 1000)}`
       : [],
   }
 }
-
-// ─── EMBEDDING ────────────────────────────────────────────────
 
 async function generateEmbedding(job, classification) {
   const text = `
@@ -253,8 +208,6 @@ async function generateEmbedding(job, classification) {
   })
   return response.data[0].embedding
 }
-
-// ─── AI CROSS CHECK (Stage 4) ─────────────────────────────────
 
 async function getAIMatchScore(profile, job, dnaScore, jdCoverageScore) {
   try {
@@ -279,7 +232,7 @@ async function getAIMatchScore(profile, job, dnaScore, jdCoverageScore) {
 SCORING:
 90-100: Perfect — all required skills, right level, right role
 75-89: Strong — most required skills, minor gaps
-60-74: Decent — some required skills, notable gaps
+60-74: Decent — some skills, notable gaps
 Below 60: Weak — missing key requirements
 
 DNA score: ${dnaScore}/100
@@ -314,9 +267,7 @@ Description: ${(job.description || '').slice(0, 600)}`
   }
 }
 
-// ─── 4-STAGE MATCH AND QUEUE ──────────────────────────────────
-
-async function matchAndQueue(job, classification, jobEmbedding, supabase) {
+async function matchAndQueue(job, classification, supabase) {
   if (!job.is_direct_apply) return 0
 
   const { data: settings } = await supabase
@@ -334,18 +285,18 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
     const userId = userSettings.user_id
 
     try {
-      // ── STAGE 1A: BLACKLIST ───────────────────────────
+      // STAGE 1A: Blacklist
       const blacklist = (userSettings.blacklisted_companies || []).map(c => c.toLowerCase())
       if (blacklist.some(b => (job.company || '').toLowerCase().includes(b))) continue
 
-      // ── STAGE 1B: JOB TYPE ───────────────────────────
+      // STAGE 1B: Job type
       const userJobTypes = userSettings.job_types || ['internship', 'coop']
       if (
         classification.job_type_clean !== 'unknown' &&
         !userJobTypes.includes(classification.job_type_clean)
       ) continue
 
-      // ── STAGE 1C: DAILY LIMIT ────────────────────────
+      // STAGE 1C: Daily limit
       const { count: appliedToday } = await supabase
         .from('apply_queue')
         .select('*', { count: 'exact', head: true })
@@ -355,7 +306,7 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
 
       if ((appliedToday || 0) >= (userSettings.daily_limit || 5)) continue
 
-      // ── STAGE 1D: ALREADY QUEUED ─────────────────────
+      // STAGE 1D: Already queued
       const { data: existing } = await supabase
         .from('apply_queue')
         .select('id')
@@ -365,7 +316,7 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
 
       if (existing) continue
 
-      // ── GET FULL PROFILE ─────────────────────────────
+      // Get profile
       const { data: profile } = await supabase
         .from('intelligence_profiles')
         .select('embedding, primary_role, career_stage, suggested_roles, skill_groupings, experience_highlights, target_role_tags, proven_skills, learning_skills, industries')
@@ -374,7 +325,7 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
 
       if (!profile) continue
 
-      // ── STAGE 1E: SENIORITY FILTER ───────────────────
+      // STAGE 1E: Seniority filter
       const seniorTitles = ['senior', 'sr.', 'staff', 'principal',
         'manager', 'director', 'head of', 'vp ', 'vice president', 'chief', 'lead ']
       const jobTitleLower = (job.title || '').toLowerCase()
@@ -382,34 +333,31 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
       const isJuniorUser = ['Student', 'New Grad', 'Junior'].includes(profile.career_stage || 'Student')
       if (isSeniorRole && isJuniorUser) continue
 
-      // ── STAGE 1F: ROLE TAG OVERLAP ───────────────────
+      // STAGE 1F: Role tag overlap
       const userTags = profile.target_role_tags || []
       const jobTags = classification.role_tags || []
       const tagOverlap = jobTags.filter(tag => userTags.includes(tag))
       if (tagOverlap.length === 0) continue
 
-      // ── STAGE 2: DNA SCORE ───────────────────────────
+      // STAGE 2: DNA score
       const requiredSkills = classification.required_skills || []
       const niceSkills = classification.nice_skills || []
       const provenSkills = (profile.proven_skills || []).map(s => s.toLowerCase())
       const learningSkills = (profile.learning_skills || []).map(s => s.toLowerCase())
       const allUserSkills = [...new Set([...provenSkills, ...learningSkills])]
 
-      // Required skills coverage (0-50 points)
       let requiredMatches = 0
       if (requiredSkills.length > 0) {
         requiredMatches = requiredSkills.filter(skill =>
           allUserSkills.some(us => us.includes(skill) || skill.includes(us))
         ).length
-        const requiredCoverage = requiredMatches / requiredSkills.length
-        if (requiredCoverage < 0.3) continue
+        if (requiredMatches / requiredSkills.length < 0.3) continue
       }
 
       const requiredScore = requiredSkills.length > 0
         ? Math.round((requiredMatches / requiredSkills.length) * 50)
         : 35
 
-      // Nice skills (0-20 points)
       const niceMatches = niceSkills.filter(skill =>
         allUserSkills.some(us => us.includes(skill) || skill.includes(us))
       ).length
@@ -417,19 +365,16 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
         ? Math.round((niceMatches / niceSkills.length) * 20)
         : 10
 
-      // Role overlap depth (0-20 points)
       const roleScore = Math.min(20, tagOverlap.length * 7)
 
-      // Industry match (0-10 points)
       const userIndustries = (profile.industries || []).map(i => i.toLowerCase())
       const jobDesc = (job.description || '').toLowerCase()
-      const industryMatch = userIndustries.some(ind => jobDesc.includes(ind))
-      const industryScore = industryMatch ? 10 : 0
+      const industryScore = userIndustries.some(ind => jobDesc.includes(ind)) ? 10 : 0
 
       const dnaScore = requiredScore + niceScore + roleScore + industryScore
       if (dnaScore < 40) continue
 
-      // ── STAGE 3: JD COVERAGE ─────────────────────────
+      // STAGE 3: JD coverage
       const allSkillsLower = (profile.skill_groupings || []).map(s => s.toLowerCase())
       const jobDescLower = (job.description || '').toLowerCase()
       const jobTitleStr = (job.title || '').toLowerCase()
@@ -441,7 +386,7 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
       const jdCoverageScore = Math.min(100, skillMentions * 10)
       if (jdCoverageScore === 0 && requiredSkills.length > 0) continue
 
-      // ── STAGE 4: AI CROSS CHECK ───────────────────────
+      // STAGE 4: AI cross check
       const aiResult = await getAIMatchScore(
         profile,
         {
@@ -457,19 +402,7 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
       const finalScore = aiResult.score
       if (finalScore < (userSettings.match_threshold || 72)) continue
 
-      // ── QUEUE ─────────────────────────────────────────
-      const matchBreakdown = {
-        dna_score: dnaScore,
-        jd_coverage: jdCoverageScore,
-        ai_score: finalScore,
-        verdict: aiResult.verdict,
-        green_flags: aiResult.green_flags,
-        red_flags: aiResult.red_flags,
-        required_skills_matched: requiredMatches,
-        required_skills_total: requiredSkills.length,
-        tag_overlap: tagOverlap,
-      }
-
+      // Queue it
       const { error } = await supabase.from('apply_queue').insert({
         user_id: userId,
         job_id: job.job_id,
@@ -479,7 +412,17 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
         location: job.location,
         match_score: finalScore,
         match_reason: aiResult.reason,
-        match_breakdown: matchBreakdown,
+        match_breakdown: {
+          dna_score: dnaScore,
+          jd_coverage: jdCoverageScore,
+          ai_score: finalScore,
+          verdict: aiResult.verdict,
+          green_flags: aiResult.green_flags,
+          red_flags: aiResult.red_flags,
+          required_skills_matched: requiredMatches,
+          required_skills_total: requiredSkills.length,
+          tag_overlap: tagOverlap,
+        },
         status: 'queued',
       })
 
@@ -493,14 +436,12 @@ async function matchAndQueue(job, classification, jobEmbedding, supabase) {
   return queued
 }
 
-// ─── MAIN ─────────────────────────────────────────────────────
-
 export async function GET(request) {
   const supabase = createServiceSupabase()
   const url = new URL(request.url)
   const limit = parseInt(url.searchParams.get('limit') || '20')
 
-  // Prioritize internship jobs first
+  // Prioritize jobs with "intern" in title first
   let { data: jobs, error } = await supabase
     .from('job_listings')
     .select('job_id, apply_url, company, title, description, location, job_type, source')
@@ -511,7 +452,7 @@ export async function GET(request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // If no internship jobs left, process any unclassified
+  // Fallback to any unclassified if no intern jobs left
   if (!jobs?.length) {
     const fallback = await supabase
       .from('job_listings')
@@ -533,15 +474,9 @@ export async function GET(request) {
 
     await Promise.allSettled(batch.map(async (job) => {
       try {
-        const job_type_clean = deriveJobType(job)
         const is_direct_apply = deriveIsDirectApply(job)
-        const aiResult = await classifyWithAI(job)
-
-        const classification = {
-          job_type_clean,
-          is_direct_apply,
-          ...aiResult,
-        }
+        const classification = await classifyWithAI(job)
+        classification.is_direct_apply = is_direct_apply
 
         const embedding = await generateEmbedding(job, classification)
 
@@ -564,9 +499,8 @@ export async function GET(request) {
         classified++
 
         const q = await matchAndQueue(
-          { ...job, is_direct_apply },
+          { ...job, is_direct_apply, job_id: job.job_id },
           classification,
-          embedding,
           supabase
         )
         queued += q
@@ -577,7 +511,7 @@ export async function GET(request) {
           .from('job_listings')
           .update({
             classified: true,
-            job_type_clean: deriveJobType(job),
+            job_type_clean: 'fulltime',
             is_direct_apply: deriveIsDirectApply(job),
             role_tags: ['other'],
             location_type: 'unknown',
@@ -589,11 +523,5 @@ export async function GET(request) {
     }))
   }
 
-  return NextResponse.json({
-    success: true,
-    classified,
-    queued,
-    failed,
-    total: jobs.length,
-  })
+  return NextResponse.json({ success: true, classified, queued, failed, total: jobs.length })
 }
