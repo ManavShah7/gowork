@@ -2,15 +2,37 @@ import { NextResponse } from 'next/server'
 import { createServiceSupabase } from '@/lib/supabase-server'
 
 const COMPANIES = [
-  'figma', 'notion', 'linear', 'vercel', 'framer', 'webflow', 'canva', 'miro',
-  'loom', 'coda', 'airtable', 'retool', 'amplitude', 'mixpanel', 'segment',
-  'openai', 'anthropic', 'cohere', 'scale-ai', 'databricks', 'snowflake',
-  'stripe', 'plaid', 'brex', 'ramp', 'chime', 'robinhood', 'coinbase',
-  'hubspot', 'zendesk', 'intercom', 'asana', 'monday', 'clickup',
-  'cloudflare', 'datadog', 'newrelic', 'elastic', 'hashicorp',
-  'github', 'gitlab', 'postman', 'digitalocean', 'netlify',
+  // Design tools
+  'figma', 'notion', 'linear', 'vercel', 'framer', 'webflow',
+  'canva', 'miro', 'loom', 'coda', 'airtable', 'retool',
+  'amplitude', 'mixpanel', 'segment', 'heap', 'fullstory',
+  'hotjar', 'mouseflow', 'logrocket',
+  // AI
+  'openai', 'anthropic', 'cohere', 'scale-ai', 'databricks',
+  'snowflake', 'datarobot', 'c3-ai', 'palantir', 'weights-biases',
+  'huggingface', 'replicate', 'together', 'modal',
+  // Infrastructure
+  'cloudflare', 'datadog', 'newrelic', 'splunk', 'elastic',
+  'hashicorp', 'terraform', 'pagerduty', 'statuspage',
+  'digitalocean', 'netlify', 'supabase', 'planetscale',
+  'postman', 'insomnia', 'readme',
+  // Dev tools
+  'github', 'gitlab', 'jetbrains', 'sourcegraph', 'snyk',
+  'sonarqube', 'checkmarx', 'veracode',
+  // Communication
+  'zoom', 'dropbox', 'box', 'docusign', 'hellosign',
+  // Analytics
+  'looker', 'dbt-labs', 'fivetran', 'airbyte', 'stitch',
+  'matillion', 'talend', 'informatica',
+  // Gaming
+  'roblox', 'unity', 'riot-games', 'epic-games',
+  'ea', 'activision', 'take-two', '2k',
+  // Social
+  'pinterest', 'reddit', 'twitch', 'discord',
+  // Big tech adjacent
+  'uber', 'lyft', 'airbnb', 'doordash', 'instacart',
+  'gopuff', 'grubhub', 'postmates',
 ]
-
 export async function GET() {
   const supabase = createServiceSupabase()
   const jobs = []

@@ -2,14 +2,38 @@ import { NextResponse } from 'next/server'
 import { createServiceSupabase } from '@/lib/supabase-server'
 
 const COMPANIES = [
+  // Biotech
   'moderna', 'genentech', 'illumina', 'pacific-biosciences',
-  'benchling', 'insitro', 'recursion',
+  'benchling', 'insitro', 'recursion', 'exscientia',
+  'insilico', 'atomwise', 'schrodinger', 'relay',
+  'pattern', 'phenome-health',
+  // Digital health
   'oscar-health', 'ro', 'hims', 'noom', 'calm', 'headspace',
-  'flatiron', 'veeva', 'athenahealth',
-  'duolingo', 'coursera', 'chegg', 'quizlet', 'masterclass',
-  'roblox', 'unity', 'riot-games',
-  'waymo', 'cruise', 'rivian', 'lucid',
-  'crowdstrike', 'okta', 'snyk', 'lacework', 'wiz',
+  'flatiron', 'veeva', 'athenahealth', 'allscripts',
+  'epic', 'cerner', 'meditech',
+  // Healthcare services
+  'cityblock', 'iora', 'one-medical', 'carbon-health',
+  'forward', 'crossover', 'parsley',
+  // Mental health
+  'cerebral', 'brightside', 'lyra', 'spring-health',
+  'talkspace', 'betterhelp', 'modern-health',
+  // EdTech
+  'duolingo', 'coursera', 'chegg', 'quizlet',
+  'masterclass', 'udemy', 'pluralsight', 'linkedin-learning',
+  'outschool', 'synthesis', 'khan-academy',
+  // Mobility
+  'waymo', 'cruise', 'aurora', 'zoox',
+  'rivian', 'lucid', 'fisker', 'canoo',
+  // Security
+  'crowdstrike', 'okta', 'auth0', 'snyk',
+  'lacework', 'wiz', 'orca', 'aqua',
+  'sentinel-one', 'cylance', 'cybereason',
+  // Climate
+  'climeworks', 'twelve', 'heirloom', 'charm',
+  'watershed', 'patch', 'cloverly',
+  // Space
+  'spacex', 'relativity', 'planet', 'spire',
+  'rocket-lab', 'astra', 'sierra-space',
 ]
 
 export async function GET() {
