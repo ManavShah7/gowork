@@ -3,7 +3,19 @@ import { NextResponse } from 'next/server'
 export async function GET(request) {
   const base = new URL(request.url).origin
 
-  const sources = ['greenhouse', 'lever', 'jsearch', 'adzuna', 'remoteok', 'themuse']
+  const sources = [
+    'greenhouse-tech',
+    'greenhouse-finance',
+    'greenhouse-health',
+    'lever-tech',
+    'lever-other',
+    'jsearch-tech',
+    'jsearch-business',
+    'jsearch-science',
+    'adzuna',
+    'remoteok',
+    'themuse',
+  ]
 
   const fetchResults = await Promise.allSettled(
     sources.map(s => fetch(`${base}/api/fetch/${s}`).then(r => r.json()))
