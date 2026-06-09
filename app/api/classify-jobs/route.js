@@ -385,11 +385,12 @@ export async function GET(request) {
   const limit = parseInt(url.searchParams.get('limit') || '20')
 
   // Get unclassified jobs
-  const { data: jobs, error } = await supabase
-    .from('job_listings')
-    .select('job_id, apply_url, company, title, description, location, job_type, source')
-    .eq('classified', false)
-    .limit(limit)
+ const { data: jobs, error } = await supabase
+  .from('job_listings')
+  .select('job_id, apply_url, company, title, description, location, job_type, source')
+  .eq('classified', false)
+  .order('created_at', { ascending: true })
+  .limit(limit)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!jobs?.length) return NextResponse.json({ message: 'All classified', count: 0 })
