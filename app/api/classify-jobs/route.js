@@ -76,11 +76,11 @@ function deriveJobType(job) {
 
   // Explicit internship signals — title only, not description
   if (
-    title.includes('intern') ||
-    title.includes('internship') ||
-    type === 'internship' ||
-    type === 'intern'
-  ) return 'internship'
+  /\bintern\b/i.test(title) ||
+  /\binternship\b/i.test(title) ||
+  type === 'internship' ||
+  type === 'intern'
+) return 'internship'
 
   // Co-op signals
   if (
