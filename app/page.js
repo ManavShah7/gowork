@@ -1,4 +1,3 @@
-cat > app/page.js << 'EOF'
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
