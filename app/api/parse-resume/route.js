@@ -1,5 +1,4 @@
-import { createRequire } from 'module'
-const require = createRequire(import.meta.url)
+
 
 import { NextResponse } from 'next/server'
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase-server'
@@ -33,15 +32,7 @@ async function extractText(buffer) {
     if (text && text.trim().length > 50) return text.trim()
   } catch {}
 
-  // Fallback — try pdf-parse
-  try {
-    const pdfParse = require('pdf-parse')
-    const result = await pdfParse(buffer)
-    if (result.text && result.text.trim().length > 50) return result.text.trim()
-  } catch {}
-
-  return null
-}
+ 
 
 // ─── PARSE RESUME ────────────────────────────────────────────
 async function parseResume(rawText) {
