@@ -6,10 +6,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 function safeJSON(text, fallback = {}) {
   try {
-    const cleaned = text
-      .replace(/```json\n?/g, '')
-      .replace(/```\n?/g, '')
-      .trim()
+    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
     return JSON.parse(cleaned)
   } catch {
     const match = text.match(/\{[\s\S]*\}/)
@@ -95,7 +92,6 @@ Rules:
   ],
   "certifications": ["certification name and issuer"],
   "awards": ["award name and context"],
-  "publications": ["publication if any"],
   "languages_spoken": ["languages spoken"],
   "volunteer": ["volunteer work if listed"]
 }
@@ -104,52 +100,79 @@ Resume:
 ${rawText.slice(0, 8000)}`
     }]
   })
-
   return safeJSON(completion.choices[0].message.content)
 }
 
 async function buildProfile(parsedData, rawText) {
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o',
-    max_tokens: 2000,
+    max_tokens: 2500,
     temperature: 0,
     messages: [{
       role: 'system',
-      content: `You are a senior talent advisor at a top recruitment firm.
-You create hyper-specific candidate profiles used for semantic job matching.
+      content: `You are a senior talent advisor building candidate DNA profiles for job matching.
 Rules:
 - primary_role must be the MOST REALISTIC title they can get RIGHT NOW
-- Reference their ACTUAL companies, numbers, and achievements
-- skill_groupings must be specific tools/skills, not categories
-- positioning must mention real company names and specific metrics
-- suggested_roles must be realistic given their actual background
-- Never be generic — always be specific to this person`
+- proven_skills must be skills explicitly demonstrated in experience/projects — not just listed
+- target_role_tags must come ONLY from the allowed list
+- Be hyper-specific, never generic`
     }, {
       role: 'user',
-      content: `Build a detailed intelligence profile for job matching.
-Return ONLY a JSON object:
+      content: `Build a complete intelligence profile. Return ONLY a JSON object:
 {
-  "primary_role": "most realistic job title RIGHT NOW",
+  "primary_role": "most realistic job title RIGHT NOW (e.g. 'Product Design Intern')",
   "suggested_roles": ["8-10 specific job titles ordered by fit"],
   "career_stage": "Student|New Grad|Junior|Mid-level|Senior",
   "years_of_experience": 0,
   "education_level": "High School|Associate's|Bachelor's|Master's|PhD|Bootcamp",
   "skill_groupings": ["15-20 specific skills they actually have"],
-  "industries": ["4-6 industries based on their actual experience"],
-  "positioning": "4-5 sentences referencing SPECIFIC companies, EXACT metrics",
-  "experience_highlights": ["8-10 most impressive achievements with numbers"],
+  "industries": ["4-6 industries based on actual experience"],
+  "positioning": "4-5 sentences referencing SPECIFIC companies and EXACT metrics",
+  "experience_highlights": ["8-10 achievements with company names and numbers"],
   "technical_depth": "high|medium|low",
-  "top_companies": ["notable companies or schools on their resume"],
+  "top_companies": ["notable companies or schools on resume"],
   "target_companies": ["8-10 companies that would be a great fit"],
   "career_trajectory": "2-3 sentences describing career direction",
-  "red_flags": [],
-  "strengths": ["4-5 specific strengths"]
+  "strengths": ["4-5 specific strengths"],
+
+  "target_role_tags": [
+    "ONLY tags from this list that match what they're targeting:
+     product-design, ux-design, ui-design, visual-design, interaction-design,
+     graphic-design, brand-design, motion-design, design-research,
+     software-engineering, frontend-engineering, backend-engineering,
+     full-stack-engineering, mobile-engineering, devops,
+     machine-learning, ai-engineering, data-science, data-engineering,
+     data-analysis, business-intelligence,
+     product-management, program-management, project-management,
+     investment-banking, financial-analysis, accounting, corporate-finance,
+     private-equity, venture-capital, equity-research, risk-analysis,
+     business-analysis, strategy, consulting, operations,
+     supply-chain, logistics, procurement, business-development,
+     marketing, growth, content, brand, digital-marketing, product-marketing,
+     sales, sales-development, account-executive,
+     clinical-research, healthcare, biotech, genomics, drug-discovery,
+     cybersecurity, information-security,
+     sustainability, climate-tech, energy,
+     research, ux-research, legal, compliance,
+     human-resources, talent-acquisition, other"
+  ],
+
+  "proven_skills": [
+    "skills EXPLICITLY DEMONSTRATED in work experience or projects
+     lowercase, specific (e.g. 'figma', 'user research', 'react.js', 'python')
+     NOT just listed in skills section — must be used in real work"
+  ],
+
+  "learning_skills": [
+    "skills mentioned in education or side projects but not proven in real work
+     things they know but haven't used professionally yet"
+  ]
 }
 
 Resume data:
 ${JSON.stringify(parsedData, null, 2)}
 
-Raw resume text:
+Raw text:
 ${rawText.slice(0, 3000)}`
     }]
   })
@@ -161,6 +184,9 @@ ${rawText.slice(0, 3000)}`
   if (!profile.skill_groupings?.length) profile.skill_groupings = []
   if (!profile.positioning) profile.positioning = ''
   if (!profile.experience_highlights?.length) profile.experience_highlights = []
+  if (!profile.target_role_tags?.length) profile.target_role_tags = ['other']
+  if (!profile.proven_skills?.length) profile.proven_skills = []
+  if (!profile.learning_skills?.length) profile.learning_skills = []
 
   return profile
 }
@@ -178,38 +204,25 @@ async function generateEmbedding(profile, parsedData) {
     .map(e => `${e.degree} from ${e.school} ${e.graduation_year || ''}`)
     .join('\n')
 
-  const skillsText = [
-    ...(parsedData.skills?.technical || []),
-    ...(parsedData.skills?.tools || []),
-    ...(parsedData.skills?.languages || []),
-    ...(parsedData.skills?.frameworks || []),
-  ].join(', ')
-
   const text = `
 CANDIDATE PROFILE:
 Primary Role: ${profile.primary_role}
 Career Stage: ${profile.career_stage}
-Years of Experience: ${profile.years_of_experience}
-Technical Depth: ${profile.technical_depth}
-TARGET ROLES: ${(profile.suggested_roles || []).join('\n')}
-SKILLS AND TOOLS: ${(profile.skill_groupings || []).join(', ')}
-RAW SKILLS: ${skillsText}
-INDUSTRIES: ${(profile.industries || []).join(', ')}
-POSITIONING: ${profile.positioning}
-KEY ACHIEVEMENTS: ${(profile.experience_highlights || []).join('\n')}
-WORK EXPERIENCE: ${experienceText}
-PROJECTS: ${projectText}
-EDUCATION: ${educationText}
-TOP COMPANIES: ${(profile.top_companies || []).join(', ')}
-CAREER TRAJECTORY: ${profile.career_trajectory || ''}
-STRENGTHS: ${(profile.strengths || []).join(', ')}
+Target Roles: ${(profile.target_role_tags || []).join(', ')}
+Proven Skills: ${(profile.proven_skills || []).join(', ')}
+All Skills: ${(profile.skill_groupings || []).join(', ')}
+Industries: ${(profile.industries || []).join(', ')}
+Positioning: ${profile.positioning}
+Key Achievements: ${(profile.experience_highlights || []).join(' | ')}
+Experience: ${experienceText}
+Projects: ${projectText}
+Education: ${educationText}
   `.trim().replace(/\s+/g, ' ')
 
   const response = await openai.embeddings.create({
     model: 'text-embedding-3-small',
     input: text.slice(0, 8000),
   })
-
   return response.data[0].embedding
 }
 
@@ -234,9 +247,7 @@ export async function POST(request) {
     }
 
     if (rawText.trim().length < 100) {
-      return NextResponse.json({
-        error: 'Resume appears to be too short or empty.'
-      }, { status: 400 })
+      return NextResponse.json({ error: 'Resume appears to be too short or empty.' }, { status: 400 })
     }
 
     const parsedData = await parseResume(rawText)
@@ -248,10 +259,7 @@ export async function POST(request) {
 
     await serviceSupabase.storage
       .from('resumes')
-      .upload(fileName, buffer, {
-        contentType: 'application/pdf',
-        upsert: true
-      })
+      .upload(fileName, buffer, { contentType: 'application/pdf', upsert: true })
 
     const [resumeRes, profileRes] = await Promise.all([
       serviceSupabase.from('parsed_resumes').upsert({
@@ -274,6 +282,9 @@ export async function POST(request) {
         experience_highlights: profileData.experience_highlights,
         years_of_experience: profileData.years_of_experience || 0,
         education_level: profileData.education_level,
+        target_role_tags: profileData.target_role_tags,
+        proven_skills: profileData.proven_skills,
+        learning_skills: profileData.learning_skills,
         embedding,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' }),
@@ -282,11 +293,7 @@ export async function POST(request) {
     if (resumeRes.error) throw resumeRes.error
     if (profileRes.error) throw profileRes.error
 
-    return NextResponse.json({
-      success: true,
-      profile: profileData,
-      parsed: parsedData,
-    })
+    return NextResponse.json({ success: true, profile: profileData, parsed: parsedData })
 
   } catch (err) {
     console.error('Parse resume error:', err)
