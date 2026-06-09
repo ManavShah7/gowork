@@ -1,5 +1,3 @@
-
-
 import { NextResponse } from 'next/server'
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase-server'
 import OpenAI from 'openai'
