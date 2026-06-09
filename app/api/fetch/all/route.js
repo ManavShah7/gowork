@@ -6,9 +6,7 @@ export async function GET(request) {
   const sources = ['greenhouse', 'lever', 'jsearch', 'adzuna', 'remoteok', 'themuse']
 
   const fetchResults = await Promise.allSettled(
-    sources.map(s =>
-      fetch(`${base}/api/fetch/${s}`).then(r => r.json())
-    )
+    sources.map(s => fetch(`${base}/api/fetch/${s}`).then(r => r.json()))
   )
 
   const summary = fetchResults.map((r, i) => ({

@@ -14,7 +14,7 @@ export async function GET() {
     const data = await res.json()
     const listings = data.filter(j => j.id && j.url)
 
-    const jobs = listings.slice(0, 50).map(job => ({
+    const jobs = listings.slice(0, 100).map(job => ({
       apply_url: job.url,
       company: job.company || '',
       title: job.position || '',
