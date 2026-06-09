@@ -14,10 +14,18 @@ function cosineSimilarity(a, b) {
   return dot / denom
 }
 
+function parseEmbedding(embedding) {
+  if (!embedding) return null
+  if (Array.isArray(embedding)) return embedding
+  if (typeof embedding === 'string') {
+    try { return JSON.parse(embedding) } catch { return null }
+  }
+  return null
+}
+
 export async function GET() {
   const supabase = createServiceSupabase()
 
-  // Get user settings
   const { data: settings } = await supabase
     .from('auto_apply_settings')
     .select('*')
@@ -28,7 +36,6 @@ export async function GET() {
   const userSettings = settings[0]
   const userId = userSettings.user_id
 
-  // Get user profile
   const { data: profile } = await supabase
     .from('intelligence_profiles')
     .select('embedding, primary_role')
@@ -37,7 +44,9 @@ export async function GET() {
 
   if (!profile?.embedding) return NextResponse.json({ error: 'No embedding found for user' })
 
-  // Get top 5 classified direct-apply jobs with embeddings
+  const userEmbedding = parseEmbedding(profile.embedding)
+  if (!userEmbedding) return NextResponse.json({ error: 'Could not parse user embedding' })
+
   const { data: jobs } = await supabase
     .from('job_listings')
     .select('job_id, company, title, job_type_clean, is_direct_apply, embedding')
@@ -49,7 +58,10 @@ export async function GET() {
   if (!jobs?.length) return NextResponse.json({ error: 'No classified direct-apply jobs with embeddings' })
 
   const results = jobs.map(job => {
-    const similarity = cosineSimilarity(profile.embedding, job.embedding)
+    const jobEmbedding = parseEmbedding(job.embedding)
+    if (!jobEmbedding) return null
+
+    const similarity = cosineSimilarity(userEmbedding, jobEmbedding)
     const score = Math.round(((similarity + 1) / 2) * 99)
     const jobTypeMatch = (userSettings.job_types || []).includes(job.job_type_clean)
 
@@ -62,7 +74,9 @@ export async function GET() {
       score,
       would_queue: score >= userSettings.match_threshold && jobTypeMatch,
     }
-  }).sort((a, b) => b.score - a.score)
+  })
+  .filter(Boolean)
+  .sort((a, b) => b.score - a.score)
 
   return NextResponse.json({
     user_id: userId,
