@@ -111,4 +111,3 @@ export default function AuthPage() {
     </div>
   )
 }
-EOF
