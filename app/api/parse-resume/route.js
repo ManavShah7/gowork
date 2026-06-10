@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase-server'
+import { buildUserEmbeddingText, embed } from '@/lib/matching'
 import OpenAI from 'openai'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -191,39 +192,11 @@ ${rawText.slice(0, 3000)}`
   return profile
 }
 
-async function generateEmbedding(profile, parsedData) {
-  const experienceText = (parsedData.experience || [])
-    .map(e => `${e.title} at ${e.company}: ${(e.achievements || []).join('. ')}`)
-    .join('\n')
-
-  const projectText = (parsedData.projects || [])
-    .map(p => `${p.name}: ${p.description} using ${(p.technologies || []).join(', ')}`)
-    .join('\n')
-
-  const educationText = (parsedData.education || [])
-    .map(e => `${e.degree} from ${e.school} ${e.graduation_year || ''}`)
-    .join('\n')
-
-  const text = `
-CANDIDATE PROFILE:
-Primary Role: ${profile.primary_role}
-Career Stage: ${profile.career_stage}
-Target Roles: ${(profile.target_role_tags || []).join(', ')}
-Proven Skills: ${(profile.proven_skills || []).join(', ')}
-All Skills: ${(profile.skill_groupings || []).join(', ')}
-Industries: ${(profile.industries || []).join(', ')}
-Positioning: ${profile.positioning}
-Key Achievements: ${(profile.experience_highlights || []).join(' | ')}
-Experience: ${experienceText}
-Projects: ${projectText}
-Education: ${educationText}
-  `.trim().replace(/\s+/g, ' ')
-
-  const response = await openai.embeddings.create({
-    model: 'text-embedding-3-small',
-    input: text.slice(0, 8000),
-  })
-  return response.data[0].embedding
+// Use the shared clean user-embedding scheme (lib/matching.js §6) so the user
+// vector is symmetric with job vectors. Must stay identical to the job scheme,
+// or cosine comparison is invalid.
+async function generateEmbedding(profile) {
+  return embed(buildUserEmbeddingText(profile))
 }
 
 export async function POST(request) {
@@ -252,7 +225,7 @@ export async function POST(request) {
 
     const parsedData = await parseResume(rawText)
     const profileData = await buildProfile(parsedData, rawText)
-    const embedding = await generateEmbedding(profileData, parsedData)
+    const embedding = await generateEmbedding(profileData)
 
     const serviceSupabase = createServiceSupabase()
     const fileName = `${user.id}/resume_${Date.now()}.pdf`
