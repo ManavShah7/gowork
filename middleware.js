@@ -24,36 +24,55 @@ export async function middleware(request) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Not logged in — redirect to auth page
+  // Not logged in — redirect to auth
   if (!user && pathname.startsWith('/dashboard')) {
     return NextResponse.redirect(new URL('/', request.url))
   }
-
   if (!user && pathname.startsWith('/onboarding')) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
-  // Logged in — check onboarding status
+  // Logged in — check onboarding completion
   if (user && pathname === '/') {
-    // Check if onboarding complete
     const { data: profile } = await supabase
       .from('intelligence_profiles')
-      .select('user_id')
+      .select('user_id, target_role_tags')
       .eq('user_id', user.id)
       .single()
 
     const { data: autofill } = await supabase
       .from('autofill_data')
+      .select('user_id, phone')
+      .eq('user_id', user.id)
+      .single()
+
+    const { data: settings } = await supabase
+      .from('auto_apply_settings')
       .select('user_id')
       .eq('user_id', user.id)
       .single()
 
+    // Step 1 — no profile at all → upload resume
     if (!profile) {
       return NextResponse.redirect(new URL('/onboarding/resume', request.url))
     }
-    if (!autofill) {
+
+    // Step 2 — no target roles selected → role targeting
+    if (!profile.target_role_tags?.length) {
+      return NextResponse.redirect(new URL('/onboarding/roles', request.url))
+    }
+
+    // Step 3 — no contact details → details page
+    if (!autofill?.phone) {
       return NextResponse.redirect(new URL('/onboarding/details', request.url))
     }
+
+    // Step 4 — no autopilot settings → autopilot page
+    if (!settings) {
+      return NextResponse.redirect(new URL('/onboarding/autopilot', request.url))
+    }
+
+    // All done → dashboard
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

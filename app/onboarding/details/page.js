@@ -3,382 +3,652 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserSupabase } from '@/lib/supabase'
 
-function Section({ title, subtitle, children }) {
+const LANGUAGES = [
+  'English', 'Spanish', 'French', 'German', 'Mandarin', 'Cantonese',
+  'Japanese', 'Korean', 'Hindi', 'Arabic', 'Portuguese', 'Russian',
+  'Italian', 'Dutch', 'Hebrew', 'Turkish', 'Vietnamese', 'Bengali',
+  'Urdu', 'Tagalog', 'Polish', 'Swedish', 'Danish', 'Finnish'
+]
+
+const VISA_OPTIONS = [
+  { value: 'us_citizen', label: 'US Citizen' },
+  { value: 'green_card', label: 'Green Card' },
+  { value: 'h1b', label: 'H-1B' },
+  { value: 'opt', label: 'OPT' },
+  { value: 'stem_opt', label: 'STEM OPT' },
+  { value: 'cpt', label: 'CPT' },
+  { value: 'tn', label: 'TN Visa' },
+  { value: 'o1', label: 'O-1' },
+  { value: 'other', label: 'Other' },
+]
+
+function Toggle({ checked, onChange, label, sublabel }) {
   return (
-    <div className="bg-white border border-[#E5E5E5] rounded-2xl p-6 space-y-4">
+    <div
+      onClick={() => onChange(!checked)}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '16px 0', cursor: 'pointer', borderBottom: '1px solid #F0EEE8'
+      }}
+    >
       <div>
-        <p className="text-[15px] font-semibold text-[#0A0A0A]">{title}</p>
-        {subtitle && <p className="text-[12px] text-[#9B9B9B] mt-0.5">{subtitle}</p>}
+        <p style={{ margin: 0, fontSize: 15, fontWeight: 500, color: '#1A1A1A' }}>{label}</p>
+        {sublabel && <p style={{ margin: '2px 0 0', fontSize: 13, color: '#6B6B6B' }}>{sublabel}</p>}
       </div>
-      {children}
+      <div style={{
+        width: 44, height: 26, borderRadius: 13,
+        background: checked ? '#2D5219' : '#D4D2CC',
+        position: 'relative', transition: 'background 0.2s', flexShrink: 0
+      }}>
+        <div style={{
+          width: 20, height: 20, borderRadius: '50%', background: 'white',
+          position: 'absolute', top: 3,
+          left: checked ? 21 : 3, transition: 'left 0.2s',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
+        }} />
+      </div>
     </div>
   )
 }
 
-function Field({ label, children }) {
-  return (
-    <div>
-      <label className="text-[12px] font-medium text-[#6B6B6B] block mb-1.5">{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function Input({ value, onChange, placeholder, type = 'text' }) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      placeholder={placeholder}
-      className="w-full h-10 px-3 text-[13px] text-[#0A0A0A] border border-[#E5E5E5] rounded-xl outline-none focus:border-[#2D5219] transition-colors placeholder:text-[#DADADA] bg-white"
-    />
-  )
-}
-
-function Pill({ label, selected, onClick }) {
+function Chip({ label, selected, onClick }) {
   return (
     <button
-      type="button"
       onClick={onClick}
-      className={`h-8 px-4 rounded-xl text-[12px] font-medium border transition-all ${
-        selected
-          ? 'bg-[#2D5219] text-white border-[#2D5219]'
-          : 'bg-white text-[#0A0A0A] border-[#E5E5E5] hover:border-[#ADADAD]'
-      }`}
+      style={{
+        padding: '8px 16px', borderRadius: 100, fontSize: 14, fontWeight: 500,
+        border: `1.5px solid ${selected ? '#2D5219' : '#E0DED8'}`,
+        background: selected ? '#2D5219' : 'white',
+        color: selected ? 'white' : '#3D3D3D',
+        cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'inherit'
+      }}
     >
       {label}
     </button>
   )
 }
 
+function Section({ title, children, optional = false, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div style={{ background: 'white', borderRadius: 16, padding: '20px 20px 4px', marginBottom: 12, border: '1px solid #E8E6E0' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 16px', fontFamily: 'inherit'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A' }}>{title}</span>
+          {optional && (
+            <span style={{ fontSize: 12, fontWeight: 500, color: '#ADADAD', background: '#F5F4F0', padding: '2px 8px', borderRadius: 6 }}>
+              optional
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: 18, color: '#ADADAD', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+          ↓
+        </span>
+      </button>
+      {open && <div style={{ paddingBottom: 16 }}>{children}</div>}
+    </div>
+  )
+}
+
+function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={{ fontSize: 13, fontWeight: 600, color: '#6B6B6B', display: 'block', marginBottom: 6 }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+const inputStyle = {
+  width: '100%', padding: '12px 14px', borderRadius: 10, border: '1.5px solid #E0DED8',
+  background: '#FAFAF8', fontSize: 15, color: '#1A1A1A', outline: 'none',
+  fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s'
+}
+
 export default function DetailsPage() {
   const router = useRouter()
   const supabase = createBrowserSupabase()
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
 
   // Contact
   const [name, setName] = useState('')
+  const [preferredName, setPreferredName] = useState('')
   const [phone, setPhone] = useState('')
-  const [linkedin, setLinkedin] = useState('')
-  const [portfolio, setPortfolio] = useState('')
-
-  // Address
-  const [address, setAddress] = useState('')
+  const [linkedinUrl, setLinkedinUrl] = useState('')
+  const [portfolioUrl, setPortfolioUrl] = useState('')
   const [city, setCity] = useState('')
   const [state, setState] = useState('')
   const [zip, setZip] = useState('')
+  const [country, setCountry] = useState('United States')
 
-  // Work auth
-  const [authorized, setAuthorized] = useState(true)
-  const [sponsorship, setSponsorship] = useState(false)
-  const [visaStatus, setVisaStatus] = useState('')
-
-  // Job preferences
+  // Work preferences
   const [jobTypes, setJobTypes] = useState(['internship'])
-  const [workStyle, setWorkStyle] = useState('')
-  const [locations, setLocations] = useState('')
+  const [workStyle, setWorkStyle] = useState('any')
+  const [startDate, setStartDate] = useState('immediately')
+  const [willingToRelocate, setWillingToRelocate] = useState(false)
+  const [preferredLocations, setPreferredLocations] = useState([])
+  const [locationInput, setLocationInput] = useState('')
+
+  // Authorization
+  const [authorizedToWork, setAuthorizedToWork] = useState(true)
+  const [sponsorshipNeeded, setSponsorshipNeeded] = useState(false)
+  const [visaStatus, setVisaStatus] = useState('us_citizen')
+  const [currentlyEmployed, setCurrentlyEmployed] = useState(false)
+  const [noticePeriod, setNoticePeriod] = useState('immediately')
+
+  // Travel / logistics
+  const [willingToTravel, setWillingToTravel] = useState(false)
+  const [travelPercentage, setTravelPercentage] = useState('0%')
+  const [hasDriversLicense, setHasDriversLicense] = useState(false)
+
+  // Compensation
+  const [expectedSalary, setExpectedSalary] = useState('negotiable')
+
+  // Languages
+  const [languages, setLanguages] = useState(['English'])
 
   // EEO
   const [pronouns, setPronouns] = useState('')
   const [gender, setGender] = useState('')
-  const [sexuality, setSexuality] = useState('')
   const [ethnicity, setEthnicity] = useState('')
-  const [disability, setDisability] = useState('')
-  const [veteran, setVeteran] = useState('')
+  const [veteranStatus, setVeteranStatus] = useState('')
+  const [disabilityStatus, setDisabilityStatus] = useState('')
+
+  // Legal
+  const [backgroundCheckOk, setBackgroundCheckOk] = useState(true)
+  const [drugTestOk, setDrugTestOk] = useState(true)
+  const [felonyConviction, setFelonyConviction] = useState(false)
 
   useEffect(() => {
-    const prefill = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      setName(user.user_metadata?.full_name || '')
-
-      const { data: resume } = await supabase
-        .from('parsed_resumes')
-        .select('parsed_data')
-        .eq('user_id', user.id)
-        .single()
-
-      if (resume?.parsed_data) {
-        const d = resume.parsed_data
-        if (d.phone) setPhone(d.phone)
-        if (d.linkedin) setLinkedin(d.linkedin)
-        if (d.portfolio) setPortfolio(d.portfolio)
-        if (d.location) {
-          const parts = d.location.split(',')
-          if (parts[0]) setCity(parts[0].trim())
-          if (parts[1]) setState(parts[1].trim())
-        }
-      }
-    }
-    prefill()
+    loadData()
   }, [])
 
-  const toggleJobType = (type) => {
+  async function loadData() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const [autofillRes, profileRes, parsedRes, settingsRes] = await Promise.all([
+      supabase.from('autofill_data').select('*').eq('user_id', user.id).single(),
+      supabase.from('intelligence_profiles').select('*').eq('user_id', user.id).single(),
+      supabase.from('parsed_resumes').select('parsed_data').eq('user_id', user.id).single(),
+      supabase.from('auto_apply_settings').select('*').eq('user_id', user.id).single(),
+    ])
+
+    const a = autofillRes.data || {}
+    const p = profileRes.data || {}
+    const parsed = parsedRes.data?.parsed_data || {}
+    const s = settingsRes.data || {}
+
+    // Pre-fill from autofill_data
+    setName(a.name || parsed.name || '')
+    setPreferredName(a.preferred_name || '')
+    setPhone(a.phone || parsed.phone || '')
+    setLinkedinUrl(a.linkedin_url || parsed.linkedin || '')
+    setPortfolioUrl(a.portfolio_url || parsed.portfolio || '')
+    setCity(a.city || '')
+    setState(a.state || '')
+    setZip(a.zip || '')
+    setCountry(a.country || 'United States')
+    setAuthorizedToWork(a.authorized_to_work ?? true)
+    setSponsorshipNeeded(a.sponsorship_needed ?? false)
+    setVisaStatus(a.visa_status || 'us_citizen')
+    setPronouns(a.pronouns || '')
+    setGender(a.gender || '')
+    setEthnicity(a.ethnicity || '')
+    setVeteranStatus(a.veteran_status || '')
+    setDisabilityStatus(a.disability_status || '')
+    setWillingToRelocate(a.willing_to_relocate ?? false)
+    setWillingToTravel(a.willing_to_travel ?? false)
+    setTravelPercentage(a.travel_percentage || '0%')
+    setHasDriversLicense(a.has_drivers_license ?? false)
+    setCurrentlyEmployed(a.currently_employed ?? false)
+    setNoticePeriod(a.notice_period || 'immediately')
+    setStartDate(a.start_date || 'immediately')
+    setExpectedSalary(a.expected_salary || 'negotiable')
+    setBackgroundCheckOk(a.background_check_ok ?? true)
+    setDrugTestOk(a.drug_test_ok ?? true)
+    setFelonyConviction(a.felony_conviction ?? false)
+
+    // Settings
+    setJobTypes(s.job_types || ['internship'])
+    setWorkStyle(s.preferred_work_style || s.work_style || 'any')
+    setPreferredLocations(s.preferred_locations || [])
+
+    // Languages from parsed resume
+    const parsedLangs = parsed.languages_spoken || []
+    if (parsedLangs.length > 0) setLanguages(parsedLangs)
+
+    setLoading(false)
+  }
+
+  function toggleJobType(type) {
     setJobTypes(prev =>
       prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
     )
   }
 
-  const handleSave = async () => {
-    if (!name.trim()) { setError('Enter your name'); return }
-    if (!city.trim()) { setError('Enter your city'); return }
+  function toggleLanguage(lang) {
+    if (lang === 'English') return // always keep English
+    setLanguages(prev =>
+      prev.includes(lang) ? prev.filter(l => l !== lang) : [...prev, lang]
+    )
+  }
 
+  function addLocation() {
+    if (locationInput.trim() && !preferredLocations.includes(locationInput.trim())) {
+      setPreferredLocations(prev => [...prev, locationInput.trim()])
+      setLocationInput('')
+    }
+  }
+
+  async function save() {
     setSaving(true)
-    setError('')
-
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/'); return }
+    if (!user) return
 
-    const preferredLocations = locations
-      .split(',')
-      .map(l => l.trim())
-      .filter(Boolean)
-
-    const [autofillRes, prefsRes] = await Promise.all([
+    await Promise.all([
       supabase.from('autofill_data').upsert({
         user_id: user.id,
-        name,
-        phone,
-        linkedin_url: linkedin,
-        portfolio_url: portfolio,
-        address,
-        city,
-        state,
-        zip,
-        authorized_to_work: authorized,
-        sponsorship_needed: sponsorship,
+        name, preferred_name: preferredName, phone,
+        linkedin_url: linkedinUrl, portfolio_url: portfolioUrl,
+        city, state, zip, country,
+        authorized_to_work: authorizedToWork,
+        sponsorship_needed: sponsorshipNeeded,
         visa_status: visaStatus,
-        gender,
-        ethnicity,
-        disability_status: disability,
-        veteran_status: veteran,
-        pronouns,
+        willing_to_relocate: willingToRelocate,
+        willing_to_travel: willingToTravel,
+        travel_percentage: travelPercentage,
+        has_drivers_license: hasDriversLicense,
+        currently_employed: currentlyEmployed,
+        notice_period: noticePeriod,
+        start_date: startDate,
+        expected_salary: expectedSalary,
+        pronouns, gender, ethnicity,
+        veteran_status: veteranStatus,
+        disability_status: disabilityStatus,
+        background_check_ok: backgroundCheckOk,
+        drug_test_ok: drugTestOk,
+        felony_conviction: felonyConviction,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' }),
 
-      supabase.from('preferences').upsert({
+      supabase.from('intelligence_profiles').update({
+        languages_spoken: languages.map(l => ({ language: l, proficiency: l === 'English' ? 'native' : 'fluent' })),
+      }).eq('user_id', user.id),
+
+      supabase.from('auto_apply_settings').upsert({
         user_id: user.id,
         job_types: jobTypes,
-        work_style: workStyle,
+        preferred_work_style: workStyle,
         preferred_locations: preferredLocations,
-        updated_at: new Date().toISOString(),
+        enabled: false,
+        match_threshold: 72,
+        daily_limit: 5,
       }, { onConflict: 'user_id' }),
     ])
-
-    if (autofillRes.error) { setError(autofillRes.error.message); setSaving(false); return }
-    if (prefsRes.error) { setError(prefsRes.error.message); setSaving(false); return }
 
     router.push('/onboarding/autopilot')
   }
 
+  if (loading) return (
+    <div style={{ background: '#F5F4F0', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 24, height: 24, border: '2px solid #2D5219', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+    </div>
+  )
+
   return (
-    <div className="min-h-screen bg-[#F7F6F2] flex flex-col items-center px-4 py-12">
+    <div style={{ background: '#F5F4F0', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif' }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg) } }
+        input:focus, select:focus { border-color: #2D5219 !important; background: white !important; }
+      `}</style>
 
-      {/* Steps */}
-      <div className="flex items-center justify-center gap-2 mb-10">
-        {['Resume', 'Details', 'Autopilot'].map((step, i) => (
-          <div key={step} className="flex items-center gap-2">
-            <div className={`flex items-center gap-1.5 ${i === 1 ? 'opacity-100' : 'opacity-30'}`}>
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-medium ${
-                i < 2 ? 'bg-[#2D5219] text-white' : 'bg-[#E5E5E5] text-[#888]'
-              }`}>
-                {i === 0 ? '✓' : i + 1}
-              </div>
-              <span className="text-[13px] text-[#0A0A0A]">{step}</span>
-            </div>
-            {i < 2 && <div className="w-8 h-px bg-[#E5E5E5]" />}
-          </div>
-        ))}
-      </div>
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '48px 24px 120px' }}>
 
-      <div className="text-center mb-8 max-w-[480px]">
-        <h1 className="text-[28px] font-semibold text-[#0A0A0A] tracking-tight mb-2">
-          Fill this in once.
+        {/* Progress */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 40 }}>
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} style={{ height: 3, flex: 1, borderRadius: 2, background: i <= 3 ? '#2D5219' : '#E0DED8' }} />
+          ))}
+        </div>
+
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: '#1A1A1A', margin: '0 0 8px' }}>
+          A few quick details
         </h1>
-        <p className="text-[14px] text-[#6B6B6B] leading-relaxed">
-          GoWork uses this to fill every job application automatically — from your name to your EEO data. You never type this again.
+        <p style={{ fontSize: 16, color: '#6B6B6B', margin: '0 0 32px', lineHeight: 1.5 }}>
+          Pre-filled from your resume. Just confirm and fill any gaps.
         </p>
-      </div>
-
-      <div className="w-full max-w-[600px] space-y-4">
 
         {/* Contact */}
-        <Section title="Contact" subtitle="Basic fields on every application">
-          <div className="grid grid-cols-2 gap-3">
+        <Section title="Contact">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="Full name">
-              <Input value={name} onChange={setName} placeholder="Manav Shah" />
+              <input style={inputStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Manav Shah" />
             </Field>
-            <Field label="Phone">
-              <Input value={phone} onChange={setPhone} placeholder="+1 (555) 000-0000" type="tel" />
+            <Field label="Preferred name">
+              <input style={inputStyle} value={preferredName} onChange={e => setPreferredName(e.target.value)} placeholder="Manav (optional)" />
             </Field>
           </div>
+          <Field label="Phone">
+            <input style={inputStyle} value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 (617) 000-0000" />
+          </Field>
           <Field label="LinkedIn URL">
-            <Input value={linkedin} onChange={setLinkedin} placeholder="linkedin.com/in/yourname" />
+            <input style={inputStyle} value={linkedinUrl} onChange={e => setLinkedinUrl(e.target.value)} placeholder="linkedin.com/in/yourprofile" />
           </Field>
-          <Field label="Portfolio / Website">
-            <Input value={portfolio} onChange={setPortfolio} placeholder="yourportfolio.com" />
+          <Field label="Portfolio / GitHub">
+            <input style={inputStyle} value={portfolioUrl} onChange={e => setPortfolioUrl(e.target.value)} placeholder="yoursite.com or github.com/you" />
           </Field>
-        </Section>
-
-        {/* Address */}
-        <Section title="Location" subtitle="Used for address and location fields">
-          <Field label="Street address">
-            <Input value={address} onChange={setAddress} placeholder="123 Main St" />
-          </Field>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-1">
-              <Field label="City">
-                <Input value={city} onChange={setCity} placeholder="Boston" />
-              </Field>
-            </div>
-            <Field label="State">
-              <Input value={state} onChange={setState} placeholder="MA" />
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
+            <Field label="City">
+              <input style={inputStyle} value={city} onChange={e => setCity(e.target.value)} placeholder="Boston" />
             </Field>
-            <Field label="ZIP">
-              <Input value={zip} onChange={setZip} placeholder="02101" />
+            <Field label="State">
+              <input style={inputStyle} value={state} onChange={e => setState(e.target.value)} placeholder="MA" />
+            </Field>
+            <Field label="Zip">
+              <input style={inputStyle} value={zip} onChange={e => setZip(e.target.value)} placeholder="02101" />
             </Field>
           </div>
-        </Section>
-
-        {/* Work auth */}
-        <Section title="Work authorization" subtitle="Answered automatically on every application">
-          <Field label="Authorized to work in the US?">
-            <div className="flex gap-2">
-              <Pill label="Yes" selected={authorized === true} onClick={() => setAuthorized(true)} />
-              <Pill label="No" selected={authorized === false} onClick={() => setAuthorized(false)} />
-            </div>
-          </Field>
-          <Field label="Require sponsorship now or in the future?">
-            <div className="flex gap-2">
-              <Pill label="Yes" selected={sponsorship === true} onClick={() => setSponsorship(true)} />
-              <Pill label="No" selected={sponsorship === false} onClick={() => setSponsorship(false)} />
-            </div>
-          </Field>
-          <Field label="Visa status">
-            <div className="flex gap-2 flex-wrap">
-              {['US Citizen', 'Green Card', 'F-1/OPT', 'H-1B', 'Other'].map(v => (
-                <Pill key={v} label={v} selected={visaStatus === v} onClick={() => setVisaStatus(visaStatus === v ? '' : v)} />
-              ))}
-            </div>
-          </Field>
         </Section>
 
         {/* Job preferences */}
-        <Section title="Job preferences" subtitle="GoWork only applies to jobs that match these">
-          <Field label="Job types">
-            <div className="flex gap-2 flex-wrap">
+        <Section title="Job preferences">
+          <Field label="Job type">
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {[
-                { value: 'internship', label: 'Internship' },
-                { value: 'fulltime', label: 'Full-time' },
-                { value: 'coop', label: 'Co-op' },
-                { value: 'contract', label: 'Contract' },
-              ].map(opt => (
-                <Pill
-                  key={opt.value}
-                  label={opt.label}
-                  selected={jobTypes.includes(opt.value)}
-                  onClick={() => toggleJobType(opt.value)}
+                { id: 'internship', label: 'Internship' },
+                { id: 'coop', label: 'Co-op' },
+                { id: 'fulltime', label: 'Full-time' },
+                { id: 'parttime', label: 'Part-time' },
+                { id: 'contract', label: 'Contract' },
+              ].map(t => (
+                <Chip key={t.id} label={t.label} selected={jobTypes.includes(t.id)} onClick={() => toggleJobType(t.id)} />
+              ))}
+            </div>
+          </Field>
+
+          <Field label="Work style">
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {['Any', 'Remote', 'Hybrid', 'On-site'].map(s => (
+                <Chip key={s} label={s} selected={workStyle === s.toLowerCase()} onClick={() => setWorkStyle(s.toLowerCase())} />
+              ))}
+            </div>
+          </Field>
+
+          <Field label="Start date">
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {['Immediately', '2 weeks', '1 month', '3 months'].map(d => (
+                <Chip key={d} label={d} selected={startDate === d.toLowerCase()} onClick={() => setStartDate(d.toLowerCase())} />
+              ))}
+            </div>
+          </Field>
+
+          <Toggle
+            checked={willingToRelocate}
+            onChange={setWillingToRelocate}
+            label="Willing to relocate"
+            sublabel="Open to moving for the right role"
+          />
+
+          {willingToRelocate && (
+            <Field label="Preferred locations">
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                {preferredLocations.map(loc => (
+                  <span key={loc} style={{
+                    padding: '6px 12px', background: '#2D5219', color: 'white',
+                    borderRadius: 100, fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6
+                  }}>
+                    {loc}
+                    <button onClick={() => setPreferredLocations(prev => prev.filter(l => l !== loc))}
+                      style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  style={{ ...inputStyle, flex: 1 }}
+                  value={locationInput}
+                  onChange={e => setLocationInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addLocation()}
+                  placeholder="San Francisco, CA"
+                />
+                <button onClick={addLocation} style={{
+                  padding: '12px 16px', borderRadius: 10, background: '#2D5219', color: 'white',
+                  border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: 'inherit'
+                }}>Add</button>
+              </div>
+            </Field>
+          )}
+        </Section>
+
+        {/* Work authorization */}
+        <Section title="Work authorization">
+          <Toggle
+            checked={authorizedToWork}
+            onChange={setAuthorizedToWork}
+            label="Authorized to work in the US"
+            sublabel="Citizens, green card holders, valid work visa"
+          />
+
+          <Toggle
+            checked={sponsorshipNeeded}
+            onChange={setSponsorshipNeeded}
+            label="Need visa sponsorship"
+            sublabel="H-1B, OPT extension, etc."
+          />
+
+          <Field label="Visa / work status">
+            <select
+              style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }}
+              value={visaStatus}
+              onChange={e => setVisaStatus(e.target.value)}
+            >
+              {VISA_OPTIONS.map(v => (
+                <option key={v.value} value={v.value}>{v.label}</option>
+              ))}
+            </select>
+          </Field>
+
+          <Toggle
+            checked={currentlyEmployed}
+            onChange={setCurrentlyEmployed}
+            label="Currently employed"
+            sublabel="We'll handle notice period questions for you"
+          />
+
+          {currentlyEmployed && (
+            <Field label="Notice period">
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {['Immediately', '1 week', '2 weeks', '1 month', '2 months'].map(n => (
+                  <Chip key={n} label={n} selected={noticePeriod === n.toLowerCase()} onClick={() => setNoticePeriod(n.toLowerCase())} />
+                ))}
+              </div>
+            </Field>
+          )}
+
+          <Toggle
+            checked={willingToTravel}
+            onChange={setWillingToTravel}
+            label="Willing to travel"
+          />
+
+          {willingToTravel && (
+            <Field label="Travel percentage">
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {['10%', '25%', '50%', '75%'].map(t => (
+                  <Chip key={t} label={`Up to ${t}`} selected={travelPercentage === t} onClick={() => setTravelPercentage(t)} />
+                ))}
+              </div>
+            </Field>
+          )}
+
+          <Toggle
+            checked={hasDriversLicense}
+            onChange={setHasDriversLicense}
+            label="Valid driver's license"
+          />
+        </Section>
+
+        {/* Compensation */}
+        <Section title="Compensation">
+          <p style={{ fontSize: 14, color: '#6B6B6B', margin: '0 0 16px', lineHeight: 1.5 }}>
+            We always answer salary questions with "Negotiable" — this protects your leverage. You can override if needed.
+          </p>
+          <Field label="Salary preference">
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {['Negotiable', 'Specify range'].map(s => (
+                <Chip
+                  key={s}
+                  label={s}
+                  selected={s === 'Negotiable' ? expectedSalary === 'negotiable' : expectedSalary !== 'negotiable'}
+                  onClick={() => {
+                    if (s === 'Negotiable') setExpectedSalary('negotiable')
+                  }}
                 />
               ))}
             </div>
           </Field>
-          <Field label="Work style">
-            <div className="flex gap-2 flex-wrap">
-              {['Remote', 'Hybrid', 'On-site', 'No preference'].map(s => (
-                <Pill key={s} label={s} selected={workStyle === s} onClick={() => setWorkStyle(workStyle === s ? '' : s)} />
-              ))}
-            </div>
-          </Field>
-          <Field label="Where are you open to working? (comma separated)">
-            <Input value={locations} onChange={setLocations} placeholder="Boston, New York, Remote" />
-          </Field>
+          {expectedSalary !== 'negotiable' && (
+            <Field label="Expected salary (annual)">
+              <input
+                style={inputStyle}
+                value={expectedSalary}
+                onChange={e => setExpectedSalary(e.target.value)}
+                placeholder="e.g. $80,000 - $100,000"
+              />
+            </Field>
+          )}
+        </Section>
+
+        {/* Languages */}
+        <Section title="Languages">
+          <p style={{ fontSize: 14, color: '#6B6B6B', margin: '0 0 16px' }}>
+            Select all languages you speak. We'll check the right boxes on applications.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {LANGUAGES.map(lang => (
+              <Chip
+                key={lang}
+                label={lang}
+                selected={languages.includes(lang)}
+                onClick={() => toggleLanguage(lang)}
+              />
+            ))}
+          </div>
         </Section>
 
         {/* EEO */}
-        <Section
-          title="Diversity info"
-          subtitle="Optional — only used for voluntary EEO sections. Never used to filter your opportunities. Stored securely."
-        >
+        <Section title="Identity & diversity" optional defaultOpen={false}>
+          <p style={{ fontSize: 14, color: '#6B6B6B', margin: '0 0 16px', lineHeight: 1.5 }}>
+            Used only for equal opportunity reporting. Entirely optional — we'll answer "prefer not to say" if you skip.
+          </p>
+
           <Field label="Pronouns">
-            <div className="flex gap-2 flex-wrap">
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {['He/Him', 'She/Her', 'They/Them', 'Ze/Zir', 'Prefer not to say'].map(p => (
-                <Pill key={p} label={p} selected={pronouns === p} onClick={() => setPronouns(pronouns === p ? '' : p)} />
+                <Chip key={p} label={p} selected={pronouns === p} onClick={() => setPronouns(pronouns === p ? '' : p)} />
               ))}
             </div>
           </Field>
+
           <Field label="Gender">
-            <div className="flex gap-2 flex-wrap">
-              {['Male', 'Female', 'Non-binary', 'Transgender', 'Prefer not to say'].map(g => (
-                <Pill key={g} label={g} selected={gender === g} onClick={() => setGender(gender === g ? '' : g)} />
-              ))}
-            </div>
+            <select style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }} value={gender} onChange={e => setGender(e.target.value)}>
+              <option value="">Prefer not to say</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Non-binary">Non-binary</option>
+              <option value="Genderqueer">Genderqueer</option>
+              <option value="Transgender">Transgender</option>
+              <option value="Other">Other</option>
+              <option value="Prefer not to say">Prefer not to say</option>
+            </select>
           </Field>
-          <Field label="Sexual orientation">
-            <div className="flex gap-2 flex-wrap">
-              {['Heterosexual', 'Gay or Lesbian', 'Bisexual', 'Prefer not to say'].map(s => (
-                <Pill key={s} label={s} selected={sexuality === s} onClick={() => setSexuality(sexuality === s ? '' : s)} />
-              ))}
-            </div>
-          </Field>
+
           <Field label="Race / Ethnicity">
-            <div className="flex gap-2 flex-wrap">
-              {[
-                'Hispanic or Latino',
-                'White',
-                'Black or African American',
-                'Asian',
-                'Native American',
-                'Pacific Islander',
-                'Two or more races',
-                'Prefer not to say',
-              ].map(e => (
-                <Pill key={e} label={e} selected={ethnicity === e} onClick={() => setEthnicity(ethnicity === e ? '' : e)} />
-              ))}
-            </div>
+            <select style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }} value={ethnicity} onChange={e => setEthnicity(e.target.value)}>
+              <option value="">Prefer not to say</option>
+              <option value="American Indian or Alaska Native">American Indian or Alaska Native</option>
+              <option value="Asian">Asian</option>
+              <option value="Black or African American">Black or African American</option>
+              <option value="Hispanic or Latino">Hispanic or Latino</option>
+              <option value="Native Hawaiian or Pacific Islander">Native Hawaiian or Pacific Islander</option>
+              <option value="White">White</option>
+              <option value="Two or more races">Two or more races</option>
+              <option value="Prefer not to say">Prefer not to say</option>
+            </select>
           </Field>
-          <Field label="Disability status">
-            <div className="flex gap-2 flex-wrap">
-              {['Yes, I have a disability', 'No', 'Prefer not to say'].map(d => (
-                <Pill key={d} label={d} selected={disability === d} onClick={() => setDisability(disability === d ? '' : d)} />
-              ))}
-            </div>
-          </Field>
+
           <Field label="Veteran status">
-            <div className="flex gap-2 flex-wrap">
-              {['Veteran', 'Active duty', 'Not a veteran', 'Prefer not to say'].map(v => (
-                <Pill key={v} label={v} selected={veteran === v} onClick={() => setVeteran(veteran === v ? '' : v)} />
-              ))}
-            </div>
+            <select style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }} value={veteranStatus} onChange={e => setVeteranStatus(e.target.value)}>
+              <option value="">Prefer not to say</option>
+              <option value="I am not a protected veteran">Not a veteran</option>
+              <option value="I identify as one or more of the classifications of a protected veteran">Protected veteran</option>
+              <option value="I am a disabled veteran">Disabled veteran</option>
+              <option value="I don't wish to answer">Prefer not to say</option>
+            </select>
+          </Field>
+
+          <Field label="Disability status">
+            <select style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }} value={disabilityStatus} onChange={e => setDisabilityStatus(e.target.value)}>
+              <option value="">Prefer not to say</option>
+              <option value="I do not have a disability">No disability</option>
+              <option value="I have a disability">Yes, I have a disability</option>
+              <option value="I don't wish to answer">Prefer not to say</option>
+            </select>
           </Field>
         </Section>
 
-        {error && (
-          <p className="text-[13px] text-red-500 text-center bg-red-50 py-2 rounded-xl">{error}</p>
-        )}
+        {/* Legal */}
+        <Section title="Background & legal" optional defaultOpen={false}>
+          <p style={{ fontSize: 14, color: '#6B6B6B', margin: '0 0 8px', lineHeight: 1.5 }}>
+            Defaults are fine for most people. Change only if needed.
+          </p>
+          <Toggle checked={backgroundCheckOk} onChange={setBackgroundCheckOk} label="Consent to background check" />
+          <Toggle checked={drugTestOk} onChange={setDrugTestOk} label="Consent to drug screening" />
+          <Toggle
+            checked={felonyConviction}
+            onChange={setFelonyConviction}
+            label="Have a felony conviction"
+            sublabel="If yes, you may need to explain in some applications"
+          />
+        </Section>
 
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full h-12 bg-[#2D5219] text-white rounded-xl text-[14px] font-medium hover:bg-[#3A6B22] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          {saving ? (
-            <>
-              <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="white" strokeWidth="3" strokeOpacity="0.3"/>
-                <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/>
-              </svg>
-              Saving...
-            </>
-          ) : 'Continue →'}
-        </button>
+      </div>
 
-        <p className="text-center text-[12px] text-[#ADADAD] pb-8">
-          You can update all of this anytime from your profile page.
-        </p>
-
+      {/* Sticky footer */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        background: 'rgba(245,244,240,0.95)', backdropFilter: 'blur(12px)',
+        borderTop: '1px solid #E0DED8', padding: '16px 24px'
+      }}>
+        <div style={{ maxWidth: 640, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <button onClick={() => router.back()} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontSize: 15, color: '#6B6B6B', fontFamily: 'inherit'
+          }}>← Back</button>
+          <button
+            onClick={save}
+            disabled={saving || !name || !phone}
+            style={{
+              padding: '12px 28px', borderRadius: 12, border: 'none',
+              background: name && phone ? '#2D5219' : '#E0DED8',
+              color: name && phone ? 'white' : '#ADADAD',
+              fontSize: 15, fontWeight: 600, cursor: name && phone ? 'pointer' : 'default',
+              transition: 'all 0.15s', fontFamily: 'inherit'
+            }}
+          >
+            {saving ? 'Saving...' : 'Continue →'}
+          </button>
+        </div>
       </div>
     </div>
   )
