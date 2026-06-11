@@ -43,6 +43,51 @@ Write a specific, authentic answer. No filler words.`
   }
 }
 
+// Batched chooser: for each dropdown question, pick EXACTLY one of its real
+// options that fits the candidate, or null if it can't be determined from the
+// facts. Used as the fallback after rule-based answers. One gpt-4o-mini call.
+//   questions: [{ key, label, options: string[] }]
+//   facts:     plain object of known candidate facts
+// returns: { [key]: { choice: string|null, confidence: 'high'|'low' } }
+export async function chooseFromOptions(questions, facts) {
+  if (!questions.length) return {}
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0,
+      max_tokens: 800,
+      response_format: { type: 'json_object' },
+      messages: [{
+        role: 'system',
+        content: `You fill job-application dropdowns for a candidate. For each question, choose EXACTLY ONE option from its provided "options" list — copy the option text verbatim.
+- Only answer when the candidate FACTS clearly support it.
+- For legal / visa / citizenship / nationality / security-clearance / criminal-history / disability questions, answer ONLY if the facts EXPLICITLY state it; otherwise return choice:null.
+- NEVER infer nationality, citizenship, or country of origin from the candidate's name, location, university, or skills. If nationality/citizenship is not an explicit fact, return choice:null with confidence:"low".
+- LOW-STAKES questions (e.g. "how/where did you hear about this role", referral source, marketing/how-found-us) are fine to answer with confidence:"high" — pick a sensible option such as LinkedIn, Online, Job board, Company website, or Other.
+- If you are not confident, return choice:null and confidence:"low". Never invent an option that isn't in the list. Return only JSON.`
+      }, {
+        role: 'user',
+        content: `CANDIDATE FACTS:
+${JSON.stringify(facts, null, 2)}
+
+QUESTIONS:
+${JSON.stringify(questions, null, 2)}
+
+Return JSON: {"answers":[{"key":"<key>","choice":"<exact option text or null>","confidence":"high|low"}]}`
+      }]
+    })
+    const parsed = JSON.parse(completion.choices[0].message.content)
+    const map = {}
+    for (const a of parsed.answers || []) {
+      map[String(a.key)] = { choice: a.choice ?? null, confidence: a.confidence === 'high' ? 'high' : 'low' }
+    }
+    return map
+  } catch (err) {
+    console.log('  chooseFromOptions failed:', err.message)
+    return {}
+  }
+}
+
 export async function generateCoverLetter(profile, jobInfo) {
   try {
     const completion = await openai.chat.completions.create({
