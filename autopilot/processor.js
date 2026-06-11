@@ -126,10 +126,40 @@ async function processJob(queueItem) {
     const page = context.pages()[0] || await context.newPage()
     console.log('  Browser connected ✓')
 
+    // BrowserBase auto-solves captchas (solveCaptchas:true) and signals progress
+    // via console messages. Track them so we can WAIT for the solve to finish
+    // before submitting, instead of a blind fixed timeout.
+    let captchaSolving = false
+    let captchaSolvedResolve = null
+    page.on('console', (msg) => {
+      const t = msg.text()
+      if (t === 'browserbase-solving-started') {
+        captchaSolving = true
+        console.log('  🔐 BrowserBase solving CAPTCHA...')
+      } else if (t === 'browserbase-solving-finished') {
+        captchaSolving = false
+        console.log('  ✅ CAPTCHA solved')
+        captchaSolvedResolve?.()
+      }
+    })
+    const waitForCaptcha = async (maxMs = 45000) => {
+      // Give the captcha a moment to trigger, then wait for the solve to finish.
+      await page.waitForTimeout(2500)
+      if (!captchaSolving) return
+      console.log('  Waiting for CAPTCHA solve to finish...')
+      await Promise.race([
+        new Promise(r => { captchaSolvedResolve = r }),
+        new Promise(r => setTimeout(r, maxMs)),
+      ])
+    }
+
     // Step 5: Navigate
     console.log('\n[5/7] Navigating...')
+    // Anchor on the scheme so this is idempotent: rewrites the OLD
+    // boards.greenhouse.io host to job-boards.greenhouse.io, but leaves URLs
+    // already in the new job-boards form untouched (avoids "job-job-boards").
     const directUrl = originalAts === 'greenhouse'
-      ? queueItem.job_url.replace('boards.greenhouse.io', 'job-boards.greenhouse.io')
+      ? queueItem.job_url.replace('://boards.greenhouse.io', '://job-boards.greenhouse.io')
       : queueItem.job_url
     console.log(`  URL: ${directUrl}`)
 
@@ -212,6 +242,18 @@ async function processJob(queueItem) {
       return { success: false, reason: 'few_fields' }
     }
 
+    // Safety gate: required questions we couldn't confidently answer. Never
+    // auto-submit a guess on a real application — hand it back for the human.
+    if (fillResult.needs_human?.length) {
+      console.log(`\n  ${fillResult.needs_human.length} required question(s) need human review — fallback_ready`)
+      fillResult.needs_human.forEach(q => console.log(`    • ${q}`))
+      await supabase.from('apply_queue')
+        .update({ status: 'fallback_ready', error: `Needs human review: ${fillResult.needs_human.join('; ').slice(0, 300)}` })
+        .eq('id', queueItem.id)
+      await sendFallbackEmail(autofill.email, queueItem)
+      return { success: false, reason: 'needs_human' }
+    }
+
     // Step 7: Submit or testing mode
     if (!SUBMIT_ENABLED) {
       console.log('\n[7/7] TESTING MODE — not submitting')
@@ -261,9 +303,11 @@ async function processJob(queueItem) {
     console.log('  Clicking submit...')
     await submitButton.click()
 
-    // Wait for CAPTCHA solve + page response
+    // Wait for BrowserBase to finish solving any captcha triggered by submit,
+    // then give the page a moment to process the submission.
     console.log('  Waiting for submission (CAPTCHA may be solving)...')
-    await page.waitForTimeout(15000)
+    await waitForCaptcha()
+    await page.waitForTimeout(5000)
     console.log(`  Post-submit URL: ${page.url()}`)
 
     try {
